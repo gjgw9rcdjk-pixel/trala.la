@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CATEGORIES, QUESTIONS, CORE, TINTS, STRINGS, SURFACE_OPTIONS } from '@/lib/content';
 import { buildOrder, shuffle } from '@/lib/deck';
-import { savedLang, saveLang, track } from '@/lib/analytics';
+import { savedLang, saveLang, track, rateQuestion, fetchStats } from '@/lib/analytics';
 
 const SURFACE = 'Warm paper'; // 'Warm paper' | 'Ash grey' | 'Category tint' | 'Ink card'
 
@@ -22,6 +22,7 @@ export default function App() {
   const [pos, setPos] = useState(0);
   const [loop, setLoop] = useState(0);
   const [ratings, setRatings] = useState({});
+  const [liveStats, setLiveStats] = useState({});
   const [shareIdx, setShareIdx] = useState(null);
   const [shareDone, setShareDone] = useState('');
   const [copyDone, setCopyDone] = useState('');
@@ -35,6 +36,12 @@ export default function App() {
   useEffect(() => {
     const s = savedLang();
     if (s) setLang(s);
+  }, []);
+
+  useEffect(() => {
+    fetchStats().then((s) => {
+      if (s) setLiveStats((prev) => ({ ...prev, ...s }));
+    });
   }, []);
 
   const chooseLang = (l) => {
@@ -127,13 +134,17 @@ export default function App() {
   };
 
   const rate = (kind) => {
+    const nextKind = ratings[idx] === kind ? null : kind;
     setRatings((r) => {
       const n = { ...r };
-      if (n[idx] === kind) delete n[idx];
-      else n[idx] = kind;
+      if (nextKind === null) delete n[idx];
+      else n[idx] = nextKind;
       return n;
     });
     track('rate', { question: idx, kind });
+    rateQuestion(idx, nextKind).then((res) => {
+      if (res) setLiveStats((s) => ({ ...s, [idx]: res }));
+    });
   };
 
   const rating = ratings[idx] || null;
@@ -161,10 +172,10 @@ export default function App() {
 
   const stats = useMemo(
     () =>
-      QUESTIONS.map((row, i) => ({ row, i }))
-        .sort((a, b) => b.row[3] - a.row[3])
+      QUESTIONS.map((row, i) => ({ row, i, percent: liveStats[i]?.percent ?? row[3] }))
+        .sort((a, b) => b.percent - a.percent)
         .slice(0, 8),
-    []
+    [liveStats]
   );
 
   const overlay = {
@@ -445,14 +456,14 @@ export default function App() {
           <OverlayHead title={ui.statsTitle} onClose={() => setView('deck')} />
           <div style={{ flex: 1, overflow: 'auto', padding: '0 22px 60px' }}>
             <p style={{ font: '400 11px/1.6 var(--font-mono), monospace', color: 'rgba(232,230,225,.4)', paddingBottom: 22, margin: 0 }}>{ui.statsNote}</p>
-            {stats.map(({ row, i }) => (
+            {stats.map(({ row, i, percent }) => (
               <div key={i} style={{ padding: '18px 0', borderTop: '1px solid rgba(232,230,225,.12)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
                   <div className="serif" style={{ fontSize: 19, lineHeight: 1.26 }}>{text(row)}</div>
-                  <div style={{ ...mono(11, 500, '0'), flex: 'none' }}>{row[3]}%</div>
+                  <div style={{ ...mono(11, 500, '0'), flex: 'none' }}>{percent}%</div>
                 </div>
                 <div style={{ marginTop: 12, height: 2, background: 'rgba(232,230,225,.12)' }}>
-                  <div style={{ height: 2, background: INK, width: `${row[3]}%` }} />
+                  <div style={{ height: 2, background: INK, width: `${percent}%` }} />
                 </div>
               </div>
             ))}
