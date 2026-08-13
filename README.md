@@ -67,15 +67,15 @@ Change interface wording — edit `UI.en` / `UI.lt`.
 ## Structure
 
 ```
-app/layout.jsx        fonts, metadata, PWA manifest link
-app/page.jsx           the whole app: home, deck, favourites, most loved, share, feedback
-app/api/rate/route.js  POST one up/down vote, returns the question's updated tally
-app/api/stats/route.js GET aggregate tallies for every voted-on question
-app/globals.css        resets and font variables — all other styling is inline
-lib/content.js         ← all content
+app/layout.jsx          fonts, metadata, PWA manifest link
+app/page.jsx            the whole app: home, deck, favourites, most loved, share, feedback
+app/api/rate/route.js   POST one up/down vote, returns the question's updated tally
+app/api/stats/route.js  GET aggregate tallies for every voted-on question
+app/globals.css         resets and font variables — all other styling is inline
+lib/content.js          ← all content
 lib/deck.js             shuffle and deck-building
 lib/analytics.js        anonymous device id, rating/stats fetch helpers, event tracking (stubbed)
-public/manifest.json   PWA
+public/manifest.json    PWA
 ```
 
 ## Card surface
