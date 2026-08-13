@@ -1,0 +1,35 @@
+:root { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0c0c0d;
+  color: #e8e6e1;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+body { touch-action: manipulation; }
+
+a { color: #e8e6e1; }
+a:hover { color: #fff; }
+
+::selection { background: #e8e6e1; color: #0c0c0d; }
+
+textarea:focus, button:focus { outline: none; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.serif { font-family: var(--font-serif), Georgia, serif; }
