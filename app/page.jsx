@@ -18,7 +18,12 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const [view, setView] = useState('intro');
   const [sel, setSel] = useState(CORE);
-  const [order, setOrder] = useState(() => buildOrder(QUESTIONS, CORE));
+  // Deterministic (unshuffled) on first render so server and client markup
+  // match exactly — shuffling here would differ between the two and trigger
+  // a hydration mismatch. The deck view is hidden behind the intro overlay
+  // at this point anyway, so shuffling once client-side right after mount
+  // (below) is invisible to the player.
+  const [order, setOrder] = useState(() => buildOrder(QUESTIONS, CORE, { shuffle: false }));
   const [pos, setPos] = useState(0);
   const [loop, setLoop] = useState(0);
   const [ratings, setRatings] = useState({});
@@ -36,6 +41,11 @@ export default function App() {
   useEffect(() => {
     const s = savedLang();
     if (s) setLang(s);
+  }, []);
+
+  // Client-only shuffle of the deterministic initial order (see useState above).
+  useEffect(() => {
+    setOrder((o) => shuffle(o));
   }, []);
 
   useEffect(() => {
@@ -313,11 +323,10 @@ export default function App() {
           </div>
           <div
             ref={frontRef}
-            onClick={() => advance(1)}
-            onPointerDown={(e) => { startX.current = e.clientX; }}
+            onPointerDown={(e) => { e.preventDefault(); startX.current = e.clientX; }}
             onPointerUp={(e) => {
               const dx = e.clientX - startX.current;
-              if (Math.abs(dx) > 45) { e.stopPropagation(); advance(dx < 0 ? 1 : -1); }
+              advance(Math.abs(dx) > 45 ? (dx < 0 ? 1 : -1) : 1);
             }}
             style={{
               position: 'absolute',
@@ -330,6 +339,7 @@ export default function App() {
               cursor: 'pointer',
               boxShadow: '0 24px 60px rgba(0,0,0,.5)',
               willChange: 'transform,opacity',
+              touchAction: 'none',
             }}
           >
             {cardFace(q, cat, `${pos + 1} / ${order.length}`, ui.tapHint)}
