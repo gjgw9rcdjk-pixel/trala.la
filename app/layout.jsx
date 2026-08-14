@@ -10,14 +10,15 @@ const mono = IBM_Plex_Mono({
 const serif = Instrument_Serif({
   subsets: ['latin', 'latin-ext'],
   weight: ['400'],
+  style: ['normal', 'italic'],
   variable: '--font-serif',
 });
 
 export const metadata = {
-  title: 'Trala.la — talking cards',
+  title: 'Tralala.cards — talking cards',
   description: 'Conversation cards for groups. One question at a time. No account, no setup.',
   manifest: '/manifest.json',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Trala.la' },
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Tralala' },
 };
 
 export const viewport = {
