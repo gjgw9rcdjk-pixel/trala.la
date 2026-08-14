@@ -1,4 +1,4 @@
-# Trala.la
+# Tralala.cards
 
 Conversation cards for groups. Next.js (App Router), no accounts. Ratings are
 backed by Vercel KV (Upstash Redis) — see below.

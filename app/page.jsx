@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CATEGORIES, QUESTIONS, CORE, TINTS, STRINGS, SURFACE_OPTIONS } from '@/lib/content';
+import { CATEGORIES, QUESTIONS, CORE, OPT_IN, TINTS, STRINGS, SURFACE_OPTIONS } from '@/lib/content';
 import { buildOrder, shuffle } from '@/lib/deck';
 import { savedLang, saveLang, track, rateQuestion, fetchStats } from '@/lib/analytics';
 
@@ -167,7 +167,7 @@ export default function App() {
   const shareCat = shareRow ? CATEGORIES.find((c) => c.id === shareRow[0]) : null;
 
   const doShare = async () => {
-    const body = `${text(shareRow)}\n\n— Trala.la\nhttps://trala.la`;
+    const body = `${text(shareRow)}\n\n— Tralala.cards\nhttps://tralala.cards`;
     if (navigator.share) {
       try { await navigator.share({ text: body }); } catch {}
     }
@@ -176,7 +176,7 @@ export default function App() {
   };
 
   const doCopy = async () => {
-    try { await navigator.clipboard.writeText(`${text(shareRow)} — https://trala.la`); } catch {}
+    try { await navigator.clipboard.writeText(`${text(shareRow)} — https://tralala.cards`); } catch {}
     setCopyDone('done');
   };
 
@@ -238,7 +238,7 @@ export default function App() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 0', flex: 'none' }}>
         <button onClick={() => setView('intro')} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <span style={{ ...mono(15, 400, '0'), color: 'rgba(232,230,225,.5)' }}>←</span>
-          <span className="serif" style={{ fontSize: 22, lineHeight: 1, letterSpacing: '-.01em' }}>Trala.la</span>
+          <span className="serif" style={{ fontSize: 22, lineHeight: 1, letterSpacing: '-.01em' }}>Tralala.cards</span>
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           {[
@@ -270,7 +270,8 @@ export default function App() {
           {ui.all}
         </button>
         {CATEGORIES.map((c) => {
-          const on = sel.includes(c.id) && !allSelected;
+          const on = allSelected ? CORE.includes(c.id) : sel.includes(c.id);
+          const excludedFromAll = allSelected && OPT_IN.includes(c.id);
           return (
             <button
               key={c.id}
@@ -286,10 +287,12 @@ export default function App() {
                 border: `1px solid ${on ? INK : 'rgba(232,230,225,.18)'}`,
                 background: on ? INK : 'transparent',
                 color: on ? SCREEN : 'rgba(232,230,225,.55)',
+                opacity: excludedFromAll ? 0.45 : 1,
               }}
             >
               <span>{label(c)}</span>
               {c.note && <span style={{ fontSize: 8, letterSpacing: '.06em', opacity: 0.62 }}>{c.note}</span>}
+              {excludedFromAll && !c.note && <span style={{ fontSize: 8, letterSpacing: '.06em', opacity: 0.62 }}>{ui.optIn}</span>}
             </button>
           );
         })}
@@ -378,7 +381,10 @@ export default function App() {
                   gap: 14,
                 }}
               >
-                <div className="serif" style={{ fontSize: 50, lineHeight: 1, color: cardInk, letterSpacing: '-.02em' }}>Trala.la</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span className="serif" style={{ fontSize: 58, lineHeight: 1, color: cardInk, letterSpacing: '-.02em' }}>Tra<span style={{ fontStyle: 'italic' }}>lala</span></span>
+                  <span className="serif" style={{ fontSize: 32, lineHeight: 1, color: cardInk, letterSpacing: '-.02em' }}>cards</span>
+                </div>
                 <div style={{ ...mono(8, 500, '.18em'), color: cardFaint }}>{ui.deckMeta}</div>
               </div>
             </div>
@@ -494,8 +500,8 @@ export default function App() {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div className="serif" style={{ fontSize: 19, lineHeight: 1, color: cardInk }}>Trala.la</div>
-                <div style={{ ...mono(8, 500, '.14em'), color: cardFaint }}>TRALA.LA/APP</div>
+                <div className="serif" style={{ fontSize: 19, lineHeight: 1, color: cardInk }}>Tralala</div>
+                <div style={{ ...mono(8, 500, '.14em'), color: cardFaint }}>TRALALA.CARDS</div>
               </div>
             </div>
             <p style={{ marginTop: 16, textAlign: 'center', font: '400 10px/1.7 var(--font-mono), monospace', letterSpacing: '.06em', color: 'rgba(232,230,225,.32)' }}>{ui.shareNote}</p>
