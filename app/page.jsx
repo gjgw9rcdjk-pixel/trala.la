@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CATEGORIES, QUESTIONS, CORE, OPT_IN, TINTS, STRINGS, SURFACE_OPTIONS } from '@/lib/content';
+import { CATEGORIES, QUESTIONS, CORE, OPT_IN, TINTS, STRINGS, SURFACE_OPTIONS, LANGUAGES } from '@/lib/content';
 import { buildOrder, shuffle } from '@/lib/deck';
 import { savedLang, saveLang, track, rateQuestion, fetchStats } from '@/lib/analytics';
 
@@ -76,8 +76,8 @@ export default function App() {
   const cardMuted = onDark ? 'rgba(236,233,226,.5)' : 'rgba(19,19,22,.45)';
   const cardFaint = onDark ? 'rgba(236,233,226,.3)' : 'rgba(19,19,22,.32)';
 
-  const label = (c) => `${c.icon}  ${(L === 'en' ? c.en : c.lt).toUpperCase()}`;
-  const text = (row) => (L === 'en' ? row[1] : row[2]);
+  const label = (c) => `${c.icon}  ${c.names[L].toUpperCase()}`;
+  const text = (row) => row[1][L];
 
   const allSelected = sel.length === CORE.length && sel.every((id) => CORE.includes(id));
 
@@ -182,7 +182,7 @@ export default function App() {
 
   const stats = useMemo(
     () =>
-      QUESTIONS.map((row, i) => ({ row, i, percent: liveStats[i]?.percent ?? row[3] }))
+      QUESTIONS.map((row, i) => ({ row, i, percent: liveStats[i]?.percent ?? row[2] }))
         .sort((a, b) => b.percent - a.percent)
         .slice(0, 8),
     [liveStats]
@@ -245,7 +245,6 @@ export default function App() {
             [ui.fav, () => setView('favs')],
             [ui.stats, () => setView('stats')],
             [ui.say, () => { setView('feedback'); setSent(false); }],
-            [L === 'en' ? 'EN' : 'LT', () => chooseLang(L === 'en' ? 'lt' : 'en')],
           ].map(([t, fn]) => (
             <button key={t} onClick={fn} style={{ ...mono(10), color: 'rgba(232,230,225,.5)', padding: '10px 7px' }}>
               {t}
@@ -400,31 +399,30 @@ export default function App() {
             <p style={{ margin: 0, font: '400 12px/1.7 var(--font-mono), monospace', color: 'rgba(232,230,225,.4)' }}>{ui.introTop}</p>
           </div>
 
-          <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 20 }}>
-            <span style={{ ...mono(9, 500, '.14em'), color: 'rgba(232,230,225,.35)' }}>{ui.langLabelHome}</span>
-            <div style={{ flex: 1, display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-              {[['en', 'ENGLISH'], ['lt', 'LIETUVIŲ']].map(([code, name]) => (
-                <button
-                  key={code}
-                  onClick={() => chooseLang(code)}
-                  style={{
-                    padding: '9px 18px',
-                    borderRadius: 100,
-                    ...mono(10, 500, '.14em'),
-                    border: `1px solid ${L === code ? INK : 'rgba(232,230,225,.2)'}`,
-                    background: L === code ? INK : 'transparent',
-                    color: L === code ? SCREEN : 'rgba(232,230,225,.55)',
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
+          <div style={{ marginTop: 24, flex: 'none', ...mono(9, 500, '.14em'), color: 'rgba(232,230,225,.35)' }}>{ui.langLabelHome}</div>
+          <div style={{ marginTop: 10, flex: 'none', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
+            {LANGUAGES.map(({ code, name }) => (
+              <button
+                key={code}
+                onClick={() => chooseLang(code)}
+                style={{
+                  padding: '9px 10px',
+                  borderRadius: 100,
+                  textAlign: 'center',
+                  ...mono(10, 500, '.08em'),
+                  border: `1px solid ${L === code ? INK : 'rgba(232,230,225,.2)'}`,
+                  background: L === code ? INK : 'transparent',
+                  color: L === code ? SCREEN : 'rgba(232,230,225,.55)',
+                }}
+              >
+                {name}
+              </button>
+            ))}
           </div>
 
           <button
             onClick={() => { setView('deck'); track('session_start'); }}
-            style={{ flex: 'none', background: INK, color: SCREEN, textAlign: 'center', padding: 19, borderRadius: 100, ...mono(11, 600, '.2em') }}
+            style={{ marginTop: 22, flex: 'none', background: INK, color: SCREEN, textAlign: 'center', padding: 19, borderRadius: 100, ...mono(11, 600, '.2em') }}
           >
             {ui.start}
           </button>
