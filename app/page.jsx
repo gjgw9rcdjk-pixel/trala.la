@@ -182,7 +182,12 @@ export default function App() {
 
   const stats = useMemo(
     () =>
-      QUESTIONS.map((row, i) => ({ row, i, percent: liveStats[i]?.percent ?? row[2] }))
+      QUESTIONS.map((row, i) => ({
+        row,
+        i,
+        percent: liveStats[i]?.percent ?? row[2],
+        count: (liveStats[i]?.like ?? 0) + (liveStats[i]?.down ?? 0),
+      }))
         .sort((a, b) => b.percent - a.percent)
         .slice(0, 8),
     [liveStats]
@@ -470,14 +475,14 @@ export default function App() {
           <OverlayHead title={ui.statsTitle} onClose={() => setView('deck')} />
           <div style={{ flex: 1, overflow: 'auto', padding: '0 22px 60px' }}>
             <p style={{ font: '400 11px/1.6 var(--font-mono), monospace', color: 'rgba(232,230,225,.4)', paddingBottom: 22, margin: 0 }}>{ui.statsNote}</p>
-            {stats.map(({ row, i, percent }) => (
+            {stats.map(({ row, i, percent, count }) => (
               <div key={i} style={{ padding: '18px 0', borderTop: '1px solid rgba(232,230,225,.12)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 16 }}>
                   <div className="serif" style={{ fontSize: 19, lineHeight: 1.26 }}>{text(row)}</div>
-                  <div style={{ ...mono(11, 500, '0'), flex: 'none' }}>{percent}%</div>
+                  <div style={{ ...mono(11, 500, '0'), flex: 'none' }}>{count ? `${percent}% (${count})` : ui.noVotes}</div>
                 </div>
                 <div style={{ marginTop: 12, height: 2, background: 'rgba(232,230,225,.12)' }}>
-                  <div style={{ height: 2, background: INK, width: `${percent}%` }} />
+                  <div style={{ height: 2, background: INK, width: `${count ? percent : 0}%` }} />
                 </div>
               </div>
             ))}
