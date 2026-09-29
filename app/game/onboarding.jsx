@@ -6,10 +6,10 @@ import { NeonFlamingo, Sheet } from './parts';
 
 // Audience → decks it seeds on the first round (design 14a·04).
 export const AUDIENCES = [
-  { id: 'friends', key: 'whoFriends', glyph: '♣', color: '#FFC93C', decks: ['fun', 'awkward', 'firsts'] },
-  { id: 'date', key: 'whoDate', glyph: '♥', color: '#B579FF', decks: ['couples', 'deep', 'future'] },
+  { id: 'friends', key: 'whoFriends', glyph: '♣', color: '#FFC93C', decks: ['union', 'awkward', 'firsts'] },
+  { id: 'date', key: 'whoDate', glyph: '♥', color: '#B579FF', decks: ['couples', 'night', 'future'] },
   { id: 'family', key: 'whoFamily', glyph: '◆', color: '#3FA9FF', decks: ['know', 'food', 'firsts'] },
-  { id: 'work', key: 'whoWork', glyph: '♦', color: '#3AD07A', decks: ['team', 'fun', 'know'] },
+  { id: 'work', key: 'whoWork', glyph: '♦', color: '#3AD07A', decks: ['team', 'union', 'know'] },
 ];
 
 export function Splash() {

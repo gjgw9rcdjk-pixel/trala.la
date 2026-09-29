@@ -103,10 +103,10 @@ function maskableIcon(size) {
 // Open Graph 1200×630 (design 13d): a real question card on the dot ground,
 // with the wordmark, a one-line pitch and a "play free" button beside it.
 function ogImage() {
-  const q = QUESTION_BY_ID.get('fun-09');
+  const q = QUESTION_BY_ID.get('union-02');
   return el('div', { width: '100%', height: '100%', padding: 68, gap: 52, alignItems: 'center', ...dots(2.6, 30) }, [
     el('div', { flex: 1, height: '100%', flexDirection: 'column', background: CARD, borderRadius: 36, padding: '52px 48px' }, [
-      el('div', { fontFamily: 'Jakarta', fontSize: 20, letterSpacing: 3.2, color: PINK_ON_CARD }, 'FUN'),
+      el('div', { fontFamily: 'Jakarta', fontSize: 20, letterSpacing: 3.2, color: PINK_ON_CARD }, 'THE APPLIANCE UNION'),
       el('div', { marginTop: 28, fontFamily: 'Archivo', fontSize: 54, lineHeight: 1.14, letterSpacing: -1.6, color: INK }, q[2].en),
     ]),
     el('div', { width: 372, flexDirection: 'column', gap: 28 }, [
