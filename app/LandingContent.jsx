@@ -1,22 +1,36 @@
 'use client';
 
-import { CATEGORIES, QUESTIONS } from '@/lib/content';
+import { CATEGORIES, QUESTIONS, QUESTION_BY_ID } from '@/lib/content';
 import { LANDING } from '@/lib/landingCopy';
 import { useLandingLang } from '@/lib/useLandingLang';
 import { PATH_BY_LANG } from '@/lib/seo';
 import { DECK_STYLE, SPICE_OF } from '@/lib/gameMeta';
 
-// Three real questions per deck for the "sample questions" section. Fixed
-// picks (highest stored like rate, then id) so server and client render the
-// same list. The 18+ deck only shows its mild cards here.
+// Hand-picked sample questions per deck: short, funny and easy to share, so
+// the landing page shows the best of each deck. Decks not listed here (and any
+// id that no longer exists) fall back to the highest stored like rate, then id.
+// The 18+ deck only shows its mild cards here.
+const SAMPLE_PICKS = {
+  union: ['union-02', 'union-09', 'union-19'],
+  know: ['know-02', 'know-05', 'know-10'],
+  night: ['night-01', 'night-03', 'night-10'],
+  reply: ['reply-12', 'reply-13', 'reply-20'],
+  dnd: ['dnd-01', 'dnd-02', 'dnd-16'],
+  firsts: ['firsts-04', 'firsts-07', 'firsts-20'],
+  awkward: ['awkward-01', 'awkward-08', 'awkward-14'],
+  duo: ['duo-01', 'duo-04', 'duo-13'],
+  door: ['door-01', 'door-08', 'door-12'],
+  fries: ['fries-01', 'fries-14', 'fries-19'],
+};
+
 const SAMPLES = Object.fromEntries(
-  CATEGORIES.map((c) => [
-    c.id,
-    QUESTIONS
+  CATEGORIES.map((c) => {
+    const picked = (SAMPLE_PICKS[c.id] ?? []).map((id) => QUESTION_BY_ID.get(id)).filter(Boolean);
+    const fallback = QUESTIONS
       .filter((q) => q[0] === c.id && (c.id !== 'spicy' || SPICE_OF[q[1]] === 'mild'))
-      .sort((a, b) => (b[3] ?? 0) - (a[3] ?? 0) || a[1].localeCompare(b[1]))
-      .slice(0, 3),
-  ])
+      .sort((a, b) => (b[3] ?? 0) - (a[3] ?? 0) || a[1].localeCompare(b[1]));
+    return [c.id, picked.length === 3 ? picked : fallback.slice(0, 3)];
+  })
 );
 
 export default function LandingContent({ lang: initialLang = 'en' }) {
