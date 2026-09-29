@@ -21,6 +21,9 @@ const SAVED_KEY = 'tralala.saved';
 const SAVED_AT_KEY = 'tralala.savedAt';
 const SETTINGS_KEY = 'tralala.settings';
 const ONBOARDED_KEY = 'tralala.onboarded';
+// Onboarding is switched off for now: START goes straight to the deck
+// picker. Set to true to bring the two onboarding steps back.
+const ONBOARDING_ON = false;
 const INSTALL_KEY = 'tralala.installDismissed';
 // Long enough for the wordmark's neon warm-up (2.2s) to finish on the splash.
 const SPLASH_MS = 2200;
@@ -390,7 +393,7 @@ export default function Game({ initialLang = 'en' }) {
   // The very first START shows the two onboarding steps first.
   const start = () => {
     track('session_start', { lang });
-    if (!readJson(ONBOARDED_KEY, false)) setScreen('onboarding');
+    if (ONBOARDING_ON && !readJson(ONBOARDED_KEY, false)) setScreen('onboarding');
     else openDecks();
   };
 
