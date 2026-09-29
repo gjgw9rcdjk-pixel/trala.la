@@ -10,9 +10,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { QUESTION_BY_ID, CATEGORIES, LANGUAGES } from '@/lib/content';
 
 const CAT_COLOR = {
-  future: '#407aea', deep: '#8a63de', night: '#8a63de', couples: '#b950b2', spicy: '#d3456c',
-  awkward: '#d05500', union: '#a77900', fun: '#a77900', know: '#748d00', food: '#009c3f',
-  team: '#00a084', firsts: '#0093cc',
+  future: '#407aea', dnd: '#407aea', deep: '#8a63de', night: '#8a63de', couples: '#b950b2', spicy: '#d3456c',
+  awkward: '#d05500', union: '#a77900', fun: '#a77900', know: '#748d00', food: '#009c3f', door: '#009c3f',
+  team: '#00a084', reply: '#00a084', firsts: '#0093cc',
 };
 const LANG_COLOR = { en: '#5983e9', lt: '#d95960', es: '#af8200', pl: '#b365c4', de: '#25a351', it: '#0095db' };
 const GOLD = '#e8c468';
