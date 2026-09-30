@@ -1,0 +1,904 @@
+'use client';
+
+// AI deck generator — prototype. Four screens (Idea → Refine → Deck → Play).
+// Two modes, switched in the bar under the header: "Mock" uses ./mockData.js
+// and a timer (free), "AI" calls app/api/create/* (Claude, costs money).
+// Reuses the game's look (app/game/game.css, scoped to .tl-shell) plus a few
+// page-only rules in ./create.css (scoped to .tc-app).
+
+import { useEffect, useRef, useState } from 'react';
+import { qSizeClass } from '@/app/game/parts';
+import { CREATE_STRINGS, DECK_LANGS, STEPS } from './strings';
+import { DECK_SIZE, MOCK_SETS, setForIdea } from './mockData';
+import '@/app/game/game.css';
+import './create.css';
+
+const DECKS_KEY = 'tralala.customDecks';
+const TIP_KEY = 'tralala.create.dragTipSeen';
+const MODE_KEY = 'tralala.create.mode';
+const THINK_MS = 1600;
+const SWAP_MS = 700;
+// Mock "live writing": name first, then one card at a time.
+const LIVE_FIRST_MS = 1400;
+const LIVE_EACH_MS = 650;
+
+function readJson(key, fallback) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key));
+    return v ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode */ }
+}
+
+let uid = 0;
+const nextId = () => `c${Date.now().toString(36)}${(uid++).toString(36)}`;
+const toCard = ([en, lt]) => ({ id: nextId(), en, lt });
+// AI text is already in the deck language, so it fills both slots.
+const aiCard = (text) => ({ id: nextId(), en: text, lt: text });
+const wait = (ms) => new Promise((res) => { setTimeout(res, ms); });
+
+// POST to one of the /api/create routes; throws with a readable message.
+async function post(path, body, signal) {
+  const key = new URLSearchParams(window.location.search).get('key') || '';
+  let res;
+  try {
+    res = await fetch(`/api/create/${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, key }),
+      signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    throw new Error('No connection to the server.');
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.message || `Request failed (${res.status}).`);
+  }
+  return res;
+}
+
+async function callApi(path, body) {
+  return (await post(path, body)).json();
+}
+
+// Reads a newline-delimited JSON stream, calling onMessage for each line.
+async function readLines(res, onMessage) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) onMessage(JSON.parse(line));
+    }
+  }
+}
+
+export default function CreateFlow() {
+  const [ui, setUi] = useState('en');
+  const s = CREATE_STRINGS[ui];
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  // Prototype switches: mock data vs real AI, and which model.
+  const [mode, setModeState] = useState({ source: 'mock', model: 'sonnet' });
+  const ai = mode.source === 'ai';
+  const setMode = (patch) => setModeState((m) => {
+    const next = { ...m, ...patch };
+    writeJson(MODE_KEY, next);
+    return next;
+  });
+  const [meta, setMeta] = useState(null); // cost/time of the last AI call
+
+  // 1 · idea
+  const [idea, setIdea] = useState('');
+  const [lang, setLang] = useState('en');
+  const [otherLang, setOtherLang] = useState('');
+  const [count, setCount] = useState(15);
+
+  // 2 · clarify
+  const [set, setSet] = useState(null);
+  const [refined, setRefined] = useState('');
+  const [answers, setAnswers] = useState({});
+
+  // 3 · deck
+  const [deck, setDeck] = useState(null); // { id, name, cards: [{id,en,lt}] }
+  const [spares, setSpares] = useState([]);
+  const [swapping, setSwapping] = useState(null);
+  // A saved deck being edited: reorder, rename and delete only, no new cards.
+  const [editing, setEditing] = useState(false);
+  const [tipSeen, setTipSeen] = useState(true);
+  // Cards appearing one by one: { total } while writing, else null.
+  const [writing, setWriting] = useState(null);
+  const liveTimers = useRef([]);
+  const liveAbort = useRef(null);
+  const stopLive = () => {
+    liveTimers.current.forEach(clearTimeout);
+    liveTimers.current = [];
+    liveAbort.current?.abort();
+    liveAbort.current = null;
+    setWriting(null);
+  };
+  useEffect(() => () => {
+    liveTimers.current.forEach(clearTimeout);
+    liveAbort.current?.abort();
+  }, []);
+
+  // 4 · play
+  const [saved, setSaved] = useState([]);
+  const [playing, setPlaying] = useState(null);
+  const [cardIdx, setCardIdx] = useState(0);
+
+  useEffect(() => {
+    setTipSeen(readJson(TIP_KEY, false));
+    setSaved(readJson(DECKS_KEY, []));
+    setModeState((m) => ({ ...m, ...readJson(MODE_KEY, {}) }));
+  }, []);
+
+  const scrollRef = useRef(null);
+  useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [step, busy]);
+
+  // Runs one "thinking" step. On failure, goes back to `failStep` and shows
+  // the error there, so the user can simply press the button again.
+  const think = async (work, failStep) => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (!ai) await wait(THINK_MS);
+      await work();
+    } catch (e) {
+      setError(e.message || s.errorGeneric);
+      setStep(failStep);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const langName = lang === 'other'
+    ? (otherLang.trim() || s.otherLang)
+    : DECK_LANGS.find((l) => l.code === lang).name[ui];
+  const textLang = lang === 'lt' ? 'lt' : 'en';
+  // The language name the AI writes in (English names read best in prompts).
+  const deckLangForAi = lang === 'other' ? otherLang.trim() || 'English' : DECK_LANGS.find((l) => l.code === lang).name.en;
+
+  const goClarify = () => {
+    setStep(1);
+    think(async () => {
+      if (ai) {
+        const r = await callApi('clarify', { idea, deckLang: deckLangForAi, count, uiLang: ui, model: mode.model });
+        setSet({
+          id: 'ai',
+          name: { en: '', lt: '' },
+          questions: r.questions.map((q) => ({
+            q: { en: q.question, lt: q.question },
+            options: q.options.map((o) => ({ en: o, lt: o })),
+          })),
+        });
+        setRefined(r.refined);
+        setMeta(r.meta);
+      } else {
+        const hit = setForIdea(idea);
+        setSet(hit);
+        setRefined(hit.custom ? hit.custom : hit.refined[ui]);
+        setMeta(null);
+      }
+      setAnswers({});
+    }, 0);
+  };
+
+  // Mock mode shows the deck screen at once and "writes" the cards into it,
+  // to preview how streaming from the real AI would feel.
+  const writeMockLive = () => {
+    stopLive();
+    setError(null);
+    const all = set.cards.map(toCard);
+    const first = all.slice(0, DECK_SIZE);
+    setDeck({ id: nextId(), name: '', cards: [] });
+    setSpares(all.slice(DECK_SIZE));
+    setMeta(null);
+    setWriting({ total: first.length });
+    const later = (ms, fn) => liveTimers.current.push(setTimeout(fn, ms));
+    later(LIVE_FIRST_MS / 2, () => setDeck((d) => ({ ...d, name: set.name[textLang] })));
+    first.forEach((c, i) => later(LIVE_FIRST_MS + i * LIVE_EACH_MS, () => {
+      setDeck((d) => ({ ...d, cards: [...d.cards, c] }));
+      if (i === first.length - 1) { liveTimers.current = []; setWriting(null); }
+    }));
+  };
+
+  // Real AI: the deck route streams the name and then each card as soon as
+  // the model finishes it. Cards written before an error are kept.
+  const writeAiLive = async () => {
+    stopLive();
+    setError(null);
+    setMeta(null);
+    const ctrl = new AbortController();
+    liveAbort.current = ctrl;
+    setDeck({ id: nextId(), name: '', cards: [] });
+    setSpares([]);
+    setWriting({ total: count });
+    let got = 0;
+    try {
+      const picked = set.questions
+        .map((q, i) => answers[i] != null && { question: q.q[ui], answer: q.options[answers[i]][ui] })
+        .filter(Boolean);
+      const res = await post('deck', { brief: refined, answers: picked, deckLang: deckLangForAi, count, model: mode.model }, ctrl.signal);
+      await readLines(res, (m) => {
+        if (m.type === 'name') setDeck((d) => ({ ...d, name: m.name }));
+        else if (m.type === 'card') { got += 1; setDeck((d) => ({ ...d, cards: [...d.cards, aiCard(m.text)] })); }
+        else if (m.type === 'done') setMeta(m.meta);
+        else if (m.type === 'error') throw new Error(m.message || s.errorGeneric);
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      setError(e.message || s.errorGeneric);
+      if (!got) setStep(1);
+    } finally {
+      if (liveAbort.current === ctrl) {
+        liveAbort.current = null;
+        setWriting(null);
+      }
+    }
+  };
+
+  const goDeck = () => {
+    setEditing(false);
+    setStep(2);
+    if (ai) writeAiLive();
+    else writeMockLive();
+  };
+
+  const swapCardAi = async (id) => {
+    if (swapping) return;
+    setSwapping(id);
+    setError(null);
+    try {
+      const old = deck.cards.find((c) => c.id === id);
+      const r = await callApi('swap', {
+        brief: refined, deckLang: deckLangForAi, model: mode.model,
+        replace: old[textLang], cards: deck.cards.map((c) => c[textLang]),
+      });
+      setDeck((d) => ({ ...d, cards: d.cards.map((c) => (c.id === id ? aiCard(r.text) : c)) }));
+    } catch (e) {
+      setError(e.message || s.errorGeneric);
+    } finally {
+      setSwapping(null);
+    }
+  };
+
+  const swapCard = (id) => {
+    if (ai) { swapCardAi(id); return; }
+    if (swapping || !spares.length) return;
+    setSwapping(id);
+    // Swapped-out card goes to the back of the spares, so ↻ never runs dry.
+    const old = deck.cards.find((c) => c.id === id);
+    const [fresh, ...rest] = spares;
+    setTimeout(() => {
+      setSpares([...rest, { ...old, id: nextId() }]);
+      setDeck((d) => ({ ...d, cards: d.cards.map((c) => (c.id === id ? fresh : c)) }));
+      setSwapping(null);
+    }, SWAP_MS);
+  };
+
+  const removeCard = (id) => setDeck((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
+  const moveCard = (from, to) => setDeck((d) => {
+    const cards = [...d.cards];
+    const [c] = cards.splice(from, 1);
+    cards.splice(to, 0, c);
+    return { ...d, cards };
+  });
+
+  const dismissTip = () => { setTipSeen(true); writeJson(TIP_KEY, true); };
+
+  const saveAndPlay = () => {
+    const entry = {
+      id: deck.id,
+      name: deck.name.trim() || set.name[textLang] || s.deckTitle,
+      // AI decks are written in the chosen language; mock decks are EN or LT.
+      lang: set.id === 'ai' && lang !== 'other' ? lang : textLang,
+      setId: set.id,
+      cards: deck.cards.map((c) => c[textLang]),
+      savedAt: Date.now(),
+    };
+    const next = [entry, ...saved.filter((d) => d.id !== entry.id)];
+    setSaved(next);
+    writeJson(DECKS_KEY, next);
+    setPlaying(entry);
+    setCardIdx(0);
+    setStep(3);
+  };
+
+  // Edit whichever deck is on screen: a deck opened from "My decks" is
+  // loaded back into the editor, with its mock set's cards as ↻ spares.
+  const editPlaying = () => {
+    if (deck?.id !== playing.id) {
+      const src = MOCK_SETS.find((m) => m.id === playing.setId) || MOCK_SETS[3];
+      const inDeck = new Set(playing.cards);
+      setSet(src);
+      setLang(playing.lang);
+      setDeck({
+        id: playing.id,
+        name: playing.name,
+        cards: playing.cards.map((t) => ({ id: nextId(), en: t, lt: t })),
+      });
+      setSpares(src.cards.map(toCard).filter((c) => !inDeck.has(c[playing.lang])));
+    }
+    setEditing(true);
+    setStep(2);
+  };
+
+  const startOver = () => {
+    stopLive();
+    setStep(0); setIdea(''); setSet(null); setDeck(null); setPlaying(null); setEditing(false); setError(null); setMeta(null);
+  };
+
+  const canGoTo = (i) => i < step && !busy && !writing && i !== 3 && !editing;
+
+  return (
+    <div className="tl-shell">
+      <div className="tl-app tc-app">
+        <header className="tc-top">
+          <span className="tl-wordmark tl-wordmark--still tc-wordmark">
+            Tralala<span className="tl-wordmark__tld">.cards</span>
+          </span>
+          <span className="tc-proto">{s.prototype}</span>
+          <div className="tc-ui-lang" role="group" aria-label="UI language">
+            {['en', 'lt'].map((l) => (
+              <button key={l} aria-pressed={ui === l} onClick={() => setUi(l)}>{l.toUpperCase()}</button>
+            ))}
+          </div>
+        </header>
+
+        <div className="tc-mode" role="group" aria-label="Prototype mode">
+          <div className="tc-seg">
+            {['mock', 'ai'].map((m) => (
+              <button key={m} aria-pressed={mode.source === m} disabled={busy} onClick={() => setMode({ source: m })}>
+                {m === 'mock' ? 'Mock' : 'AI'}
+              </button>
+            ))}
+          </div>
+          {ai && (
+            <div className="tc-seg">
+              {['sonnet', 'opus'].map((m) => (
+                <button key={m} aria-pressed={mode.model === m} disabled={busy} onClick={() => setMode({ model: m })}>
+                  {m === 'sonnet' ? 'Sonnet 5.5' : 'Opus 5.5'}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="tc-mode__note">{ai ? s.modeAi : s.modeMock}</span>
+        </div>
+
+        <nav className="tc-steps" aria-label="Progress">
+          {STEPS.map((id, i) => (
+            <button
+              key={id}
+              className="tc-step"
+              data-state={i < step ? 'done' : i === step ? 'current' : 'todo'}
+              disabled={!canGoTo(i)}
+              onClick={() => setStep(i)}
+              aria-current={i === step ? 'step' : undefined}
+            >
+              <span className="tc-step__bar" />
+              <span className="tc-step__label">{s.steps[id]}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="tl-scroll tc-scroll" ref={scrollRef}>
+          {error && !busy && (
+            <div className="tl-error tc-err" role="alert">
+              <span>!</span>
+              <div><b>{s.errorTitle}</b><small>{error}</small></div>
+              <button onClick={() => setError(null)} aria-label={s.dismiss}>✕</button>
+            </div>
+          )}
+          {meta && !busy && (step === 1 || step === 2) && !editing && (
+            <p className="tc-meta-cost">
+              {meta.model} · {(meta.ms / 1000).toFixed(0)} s · ~${meta.cost.toFixed(3)}
+            </p>
+          )}
+          {busy ? (
+            <Thinking
+              title={step === 1 ? s.thinking : s.writing}
+              sub={step === 1 ? s.thinkingSub : s.writingSub}
+              wait={ai && step === 2 ? s.writingWait : null}
+              rows={step === 1 ? 4 : 6}
+            />
+          ) : step === 0 ? (
+            <IdeaStep s={s} ui={ui} idea={idea} setIdea={setIdea} lang={lang} setLang={setLang}
+              otherLang={otherLang} setOtherLang={setOtherLang} count={count} setCount={setCount} />
+          ) : step === 1 && set ? (
+            <ClarifyStep s={s} ui={ui} set={set} refined={refined} setRefined={setRefined}
+              answers={answers} setAnswers={setAnswers} />
+          ) : step === 2 && deck ? (
+            <DeckStep s={s} deck={deck} textLang={textLang} setName={(name) => setDeck((d) => ({ ...d, name }))}
+              swapping={swapping} onSwap={editing ? null : swapCard} onRemove={removeCard} onMove={moveCard}
+              tipSeen={tipSeen} onTip={dismissTip} writing={writing}
+              notes={writing ? [] : [
+                !editing && set?.id !== 'ai' && count > deck.cards.length && s.sampleNote(deck.cards.length, count),
+                set?.id !== 'ai' && textLang === 'en' && lang !== 'en' && s.langNote(langName),
+              ].filter(Boolean)} />
+          ) : step === 3 && playing ? (
+            <PlayStep s={s} deck={playing} idx={cardIdx} onGo={(d) => setCardIdx((i) => (i + d + playing.cards.length) % playing.cards.length)}
+              saved={saved} onOpen={(d) => { setPlaying(d); setCardIdx(0); }} />
+          ) : null}
+        </div>
+
+        {!busy && (
+          <footer className="tl-pad tc-foot">
+            {step > 0 && step < 3 && (
+              <button className="tl-icon-btn" onClick={() => { stopLive(); setStep(editing && step === 2 ? 3 : step - 1); }} aria-label={s.back}>←</button>
+            )}
+            {step === 0 && (
+              <button className="tl-btn tl-btn--primary" disabled={idea.trim().length < 8} onClick={goClarify}>{s.makeIt}</button>
+            )}
+            {step === 1 && (
+              <button className="tl-btn tl-btn--primary" disabled={!refined.trim()} onClick={goDeck}>{s.buildDeck}</button>
+            )}
+            {step === 2 && (
+              <button className="tl-btn tl-btn--primary" disabled={!!writing || !deck?.cards.length} onClick={saveAndPlay}>
+                {writing ? s.writingBtn(deck?.cards.length || 0, writing.total) : s.save}
+              </button>
+            )}
+            {step === 3 && (
+              <>
+                <button className="tl-btn tl-btn--secondary" onClick={editPlaying}>{s.edit}</button>
+                <button className="tl-btn tl-btn--secondary" onClick={startOver}>{s.newDeck}</button>
+              </>
+            )}
+          </footer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Head({ title, hint }) {
+  return (
+    <div className="tc-head">
+      <h1 className="tl-title">{title}</h1>
+      <p className="tl-sub">{hint}</p>
+    </div>
+  );
+}
+
+function Thinking({ title, sub, wait: waitNote, rows }) {
+  return (
+    <div className="tc-thinking" role="status" aria-live="polite">
+      <div className="tc-thinking__dots"><span /><span /><span /></div>
+      <h2 className="tl-sheet-title">{title}</h2>
+      <p className="tl-sub">{sub}</p>
+      {waitNote && <p className="tl-note tc-wait">{waitNote}</p>}
+      <div className="tc-skeleton">
+        {Array.from({ length: rows }, (_, i) => <span key={i} style={{ animationDelay: `${i * 120}ms` }} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── 1 · idea ────────────────────────────────────────────────────────────
+function IdeaStep({ s, ui, idea, setIdea, lang, setLang, otherLang, setOtherLang, count, setCount }) {
+  return (
+    <div className="tc-body">
+      <Head title={s.ideaTitle} hint={s.ideaHint} />
+      <div className="tl-textarea-wrap">
+        <textarea
+          className="tl-field"
+          value={idea}
+          maxLength={400}
+          onChange={(e) => setIdea(e.target.value)}
+          placeholder={s.ideaPlaceholder}
+          aria-label={s.ideaTitle}
+        />
+        <span className="tl-counter">{idea.length}/400</span>
+      </div>
+
+      <div className="tc-label">{s.examples}</div>
+      <div className="tc-chips">
+        {MOCK_SETS.map((m) => (
+          <button key={m.id} className="tl-chip tc-chip" aria-pressed={idea === m.prompt[ui]} onClick={() => setIdea(m.prompt[ui])}>
+            {m.chip[ui]}
+          </button>
+        ))}
+      </div>
+
+      <label className="tl-select-row tc-lang">
+        <span>{s.deckLang}</span>
+        <b>{lang === 'other' ? s.otherLang : DECK_LANGS.find((l) => l.code === lang).name[ui]} ▾</b>
+        <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={s.deckLang}>
+          {DECK_LANGS.map((l) => <option key={l.code} value={l.code}>{l.name[ui]}</option>)}
+          <option value="other">{s.otherLang}</option>
+        </select>
+      </label>
+      {lang === 'other' && (
+        <input
+          className="tl-field tc-other"
+          value={otherLang}
+          onChange={(e) => setOtherLang(e.target.value)}
+          placeholder={s.otherLangPlaceholder}
+          aria-label={s.otherLangPlaceholder}
+          autoFocus
+        />
+      )}
+
+      <div className="tc-count">
+        <label className="tc-label" htmlFor="tc-count">{s.cardCount}</label>
+        <output className="tc-count__value" htmlFor="tc-count">{count}</output>
+      </div>
+      <input
+        id="tc-count"
+        className="tc-range"
+        type="range"
+        min={15}
+        max={50}
+        step={5}
+        value={count}
+        onChange={(e) => setCount(Number(e.target.value))}
+        style={{ '--fill': `${((count - 15) / 35) * 100}%` }}
+      />
+      <div className="tc-range__ends"><span>15</span><span>50</span></div>
+    </div>
+  );
+}
+
+// ── 2 · clarify ─────────────────────────────────────────────────────────
+// Refined idea grows with its text so the whole idea is visible at once.
+const grow = (el) => {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + 2}px`;
+};
+
+function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers }) {
+  return (
+    <div className="tc-body">
+      <Head title={s.clarifyTitle} hint={s.clarifyHint} />
+      <div className="tc-label tc-label--ai">✦ {s.refined}</div>
+      <textarea
+        ref={grow}
+        className="tl-field tc-refined"
+        value={refined}
+        onChange={(e) => { setRefined(e.target.value); grow(e.target); }}
+        aria-label={s.refined}
+      />
+      {set.questions.map((q, qi) => (
+        <fieldset key={qi} className="tc-q">
+          <legend className="tc-q__title">{q.q[ui]}</legend>
+          <div className="tc-q__opts">
+            {q.options.map((o, oi) => (
+              <button
+                key={oi}
+                className="tl-chip tc-chip"
+                aria-pressed={answers[qi] === oi}
+                onClick={() => setAnswers((a) => ({ ...a, [qi]: oi }))}
+              >
+                {o[ui]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+    </div>
+  );
+}
+
+// ── 3 · deck ────────────────────────────────────────────────────────────
+function DeckStep({ s, deck, textLang, setName, swapping, onSwap, onRemove, onMove, tipSeen, onTip, notes, writing }) {
+  const listRef = useRef(null);
+  const drag = useRef(null);
+  const [dragState, setDragState] = useState(null); // { id, dy }
+
+  const rows = () => [...listRef.current.children];
+
+  // While writing, keep the newest card (and the typing row under it) in view.
+  const liveCount = writing ? deck.cards.length : -1;
+  useEffect(() => {
+    if (liveCount < 1) return;
+    listRef.current?.children[liveCount]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [liveCount]);
+
+  const onDown = (e, id) => {
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    drag.current = { id, startY: e.clientY };
+    setDragState({ id, dy: 0 });
+    if (!tipSeen) onTip();
+  };
+
+  const onMoveP = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    let dy = e.clientY - d.startY;
+    const els = rows();
+    const i = deck.cards.findIndex((c) => c.id === d.id);
+    const me = els[i].getBoundingClientRect();
+    const mid = me.top + me.height / 2 + dy - (parseFloat(els[i].style.getPropertyValue('--dy')) || 0);
+    // Crossed the neighbour's midpoint → swap in the list and rebase the offset.
+    const below = els[i + 1]?.getBoundingClientRect();
+    const above = els[i - 1]?.getBoundingClientRect();
+    if (below && mid > below.top + below.height / 2) {
+      onMove(i, i + 1);
+      d.startY += below.height + 8;
+      dy = e.clientY - d.startY;
+    } else if (above && mid < above.top + above.height / 2) {
+      onMove(i, i - 1);
+      d.startY -= above.height + 8;
+      dy = e.clientY - d.startY;
+    }
+    setDragState({ id: d.id, dy });
+  };
+
+  const onUp = () => { drag.current = null; setDragState(null); };
+
+  return (
+    <div className="tc-body">
+      <Head
+        title={!writing ? s.deckTitle : deck.cards.length ? s.writing : s.thinking}
+        hint={!writing ? (onSwap ? s.deckHint : s.deckEditHint) : deck.cards.length ? s.writingLive : s.writingPrep}
+      />
+      <label className="tc-label" htmlFor="tc-name">{s.deckName}</label>
+      {writing && !deck.name ? (
+        <div className="tl-field tc-name tc-ghost-line" aria-hidden="true"><span /></div>
+      ) : (
+        <input id="tc-name" className="tl-field tc-name" value={deck.name} maxLength={40} disabled={!!writing} onChange={(e) => setName(e.target.value)} />
+      )}
+
+      {notes.map((n) => <div key={n} className="tl-banner tc-note"><span />{n}</div>)}
+
+      {!tipSeen && !writing && (
+        <div className="tc-tip" role="note">
+          <span className="tc-tip__icon">⋮⋮</span>
+          <span>{s.dragTip}</span>
+          <button onClick={onTip}>{s.gotIt}</button>
+        </div>
+      )}
+
+      {writing ? (
+        <div className="tc-live" role="status" aria-live="polite">
+          <span className="tc-live__label">{s.writingCount(deck.cards.length, writing.total)}</span>
+          <span className="tc-live__bar"><span style={{ width: `${(deck.cards.length / writing.total) * 100}%` }} /></span>
+        </div>
+      ) : (
+        <div className="tc-meta">{s.cardsCount(deck.cards.length)}</div>
+      )}
+      <ol className="tc-list" ref={listRef} data-live={writing ? 'true' : undefined}>
+        {deck.cards.map((c, i) => {
+          const dragging = dragState?.id === c.id;
+          return (
+            <li
+              key={c.id}
+              className={writing ? 'tc-row tc-row--live' : 'tc-row'}
+              data-dragging={dragging || undefined}
+              data-swapping={swapping === c.id || undefined}
+              style={dragging ? { transform: `translateY(${dragState.dy}px)`, '--dy': dragState.dy } : undefined}
+            >
+              <button
+                className="tc-row__handle"
+                aria-label={s.move}
+                disabled={!!writing}
+                onPointerDown={(e) => onDown(e, c.id)}
+                onPointerMove={onMoveP}
+                onPointerUp={onUp}
+                onPointerCancel={onUp}
+              >
+                ⋮⋮
+              </button>
+              <span className="tc-row__n">{i + 1}</span>
+              <p className="tc-row__q" lang={textLang}>{swapping === c.id ? '…' : c[textLang]}</p>
+              <div className="tc-row__acts" hidden={!!writing}>
+                {onSwap && <button className="tc-row__swap" onClick={() => onSwap(c.id)} aria-label={s.swap} disabled={!!swapping}>↻</button>}
+                <button onClick={() => onRemove(c.id)} aria-label={s.remove}>✕</button>
+              </div>
+            </li>
+          );
+        })}
+        {writing && Array.from({ length: writing.total - deck.cards.length }, (_, i) => (
+          <li key={`ghost-${i}`} className="tc-row tc-row--ghost" aria-hidden="true">
+            <span className="tc-row__n">{deck.cards.length + i + 1}</span>
+            {i === 0 ? (
+              <>
+                <span className="tc-typing"><span /><span /><span /></span>
+                {deck.cards.length === 0 && <PrepLine lines={s.prepLines} />}
+              </>
+            ) : (
+              <span className="tc-ghost-text" />
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+// While the model is still thinking (no cards yet), cycle through short
+// lines about what it's doing, so a ~30 s wait doesn't feel stuck.
+const PREP_MS = 3500;
+function PrepLine({ lines }) {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % lines.length), PREP_MS);
+    return () => clearInterval(t);
+  }, [lines.length]);
+  return <span key={i} className="tc-prep">{lines[i]}</span>;
+}
+
+// ── 4 · play ────────────────────────────────────────────────────────────
+// Card behaves like the game's: tap turns it over to the next card, swipe
+// left = next, swipe right = previous, ‹ › buttons and ←/→ keys do the same.
+const SWIPE_COMMIT = 90;
+const tilt = (x) => `translateX(${x}px) rotate(${-1.4 + x / 30}deg)`;
+
+function PlayStep({ s, deck, idx, onGo, saved, onOpen }) {
+  const text = deck.cards[idx];
+  const cardRef = useRef(null);
+  const busy = useRef(false);
+  const drag = useRef(null);
+  const [dragX, setDragX] = useState(0);
+  const [open, setOpen] = useState(false);
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (open) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [open]);
+
+  const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  // Fly the card out (dir -1 = left → next, +1 = right → previous), swap the
+  // text, then settle the new card in.
+  const leave = (dir) => {
+    const el = cardRef.current;
+    const delta = dir < 0 ? 1 : -1;
+    if (busy.current) return;
+    if (!el?.animate || still()) { setDragX(0); onGo(delta); return; }
+    busy.current = true;
+    const out = el.animate(
+      [
+        { transform: dragX ? tilt(dragX) : 'rotate(-1.4deg)', opacity: 1 },
+        { transform: `translateX(${dir * 130}%) rotate(${dir * 9}deg)`, opacity: 0 },
+      ],
+      { duration: 320, easing: 'cubic-bezier(.4,.05,.3,1)', fill: 'forwards' }
+    );
+    out.onfinish = () => {
+      setDragX(0);
+      onGo(delta);
+      requestAnimationFrame(() => {
+        out.cancel();
+        cardRef.current?.animate(
+          [{ transform: 'translateY(18px) rotate(-1.4deg) scale(.98)', opacity: 0.4 }, { transform: 'rotate(-1.4deg)', opacity: 1 }],
+          { duration: 220, easing: 'ease-out' }
+        );
+        busy.current = false;
+      });
+    };
+  };
+  const next = () => leave(-1);
+  const prev = () => leave(1);
+
+  // Tap: turn the card over like a real one; the next question is on the back.
+  const flip = () => {
+    const el = cardRef.current;
+    if (busy.current) return;
+    if (!el?.animate || still()) { onGo(1); return; }
+    busy.current = true;
+    const turn = (deg) => `perspective(900px) rotateY(${deg}deg) rotate(-1.4deg)`;
+    const half = el.animate([{ transform: turn(0) }, { transform: turn(-90) }],
+      { duration: 170, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'forwards' });
+    half.onfinish = () => {
+      onGo(1);
+      requestAnimationFrame(() => {
+        half.cancel();
+        const back = el.animate([{ transform: turn(90) }, { transform: turn(0) }],
+          { duration: 230, easing: 'cubic-bezier(.1,.4,.5,1)' });
+        back.onfinish = () => { busy.current = false; };
+        back.oncancel = back.onfinish;
+      });
+    };
+  };
+
+  const onPointerDown = (e) => {
+    if (busy.current) return;
+    drag.current = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false };
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    if (!d.moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - d.y)) {
+      d.moved = true;
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+    }
+    if (d.moved) setDragX(dx);
+  };
+  const onPointerUp = (e) => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d) return;
+    if (!d.moved) {
+      const tap = Math.abs(e.clientX - d.x) < 8 && Math.abs(e.clientY - d.y) < 8;
+      if (e.type === 'pointerup' && tap) flip();
+      return;
+    }
+    if (dragX <= -SWIPE_COMMIT) next();
+    else if (dragX >= SWIPE_COMMIT) prev();
+    else setDragX(0);
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target.closest?.('input, textarea, select')) return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  return (
+    <div className="tc-body">
+      <Head title={deck.name} hint={s.playHint} />
+      <div className="tl-card-area tc-card-area">
+        <div
+          ref={cardRef}
+          className="tl-card tc-card"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          style={dragX ? { transform: tilt(dragX), transition: 'none' } : undefined}
+        >
+          <div className="tl-card__label">{deck.name}</div>
+          <p className={qSizeClass(text)} lang={deck.lang}>{text}</p>
+        </div>
+      </div>
+
+      <div className="tc-nav">
+        <button className="tl-icon-btn" onClick={prev} aria-label={s.prevCard}>←</button>
+        <span className="tc-nav__count">{idx + 1} / {deck.cards.length}</span>
+        <button className="tl-icon-btn" onClick={next} aria-label={s.nextCard}>→</button>
+      </div>
+
+      <button
+        className="tl-row tc-decks-toggle"
+        aria-expanded={open}
+        aria-controls="tc-saved"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="tc-decks-toggle__label">{s.myDecks}</span>
+        <span className="tc-decks-toggle__count">{saved.length}</span>
+        <span className="tc-decks-toggle__chev" aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div className="tc-saved" id="tc-saved" ref={listRef}>
+          {saved.map((d) => {
+            const current = d.id === deck.id;
+            return (
+              <button
+                key={d.id}
+                className="tl-row tc-saved__row"
+                aria-current={current || undefined}
+                disabled={current}
+                onClick={() => { onOpen(d); setOpen(false); }}
+              >
+                <span className="tc-saved__name">{d.name}</span>
+                <span className="tc-saved__count">{s.cardsCount(d.cards.length)}</span>
+                <span className="tc-saved__go">{current ? s.nowPlaying : s.open}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <p className="tl-note tc-local">{s.savedLocal}</p>
+    </div>
+  );
+}
