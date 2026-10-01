@@ -19,6 +19,20 @@ async function codesApi(body) {
 }
 
 const day = (ms) => new Date(ms).toLocaleDateString('lt-LT');
+const when = (ms) => new Date(ms).toLocaleString('lt-LT', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+// Plain names for what app/api/create logs (logProblem).
+const PROBLEM = {
+  disconnected: 'Connection dropped',
+  daily_limit: 'Daily limit reached',
+  refused: 'AI declined',
+  too_long: 'AI answer cut off',
+  empty: 'AI sent nothing',
+  rate_limit: 'AI busy',
+  auth: 'API key problem',
+  api: 'AI service error',
+  server: 'Server error',
+};
 const linkFor = (code) => `${window.location.origin}/create?code=${code}`;
 
 function status(c) {
@@ -44,6 +58,7 @@ export default function AdminCodes() {
   const [note, setNote] = useState('');
   const [limit, setLimit] = useState(5);
   const [codes, setCodes] = useState(null);
+  const [problems, setProblems] = useState([]);
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -54,6 +69,7 @@ export default function AdminCodes() {
     try {
       const r = await codesApi(body);
       setCodes(r.codes);
+      setProblems(r.problems || []);
       return r;
     } catch (e) {
       setError(e.message);
@@ -150,6 +166,26 @@ export default function AdminCodes() {
                       <div className="ta-row__acts">
                         <CopyBtn text={linkFor(c.code)} label="Link" />
                         {st === 'Active' && <button className="tl-btn tl-btn--secondary" onClick={() => disable(c.code)}>Off</button>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <span className="tc-label">Recent problems</span>
+            {problems.length === 0 ? (
+              <p className="tl-note">Nothing has gone wrong.</p>
+            ) : (
+              <ul className="ta-list">
+                {problems.map((p) => {
+                  const note = codes?.find((c) => c.code === p.code)?.note;
+                  return (
+                    <li key={`${p.at}-${p.route}-${p.code}`} className="ta-row">
+                      <div className="ta-row__main">
+                        <b className="ta-row__problem">{PROBLEM[p.kind] || p.kind}</b>
+                        <span>{p.code ? `${p.code}${note ? ` · ${note}` : ''}` : 'Owner'}</span>
+                        <small>{when(p.at)} · {p.route}{p.detail ? ` · ${p.detail}` : ''}</small>
                       </div>
                     </li>
                   );

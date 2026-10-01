@@ -13,7 +13,7 @@
 
 import { streamJson, gate, clip, errorInfo } from '../ai';
 import { cardRules, checkCards, fixCards } from '../rules';
-import { takeGeneration } from '../codes';
+import { logProblem, takeGeneration } from '../codes';
 
 export const maxDuration = 300;
 const KEEPALIVE_MS = 5000;
@@ -114,10 +114,18 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
         }
         send({ type: 'done', meta });
       } catch (err) {
-        // Failed before any card was written: the deck doesn't count. A deck
-        // the user walked away from does (the AI call was already paid for).
-        if (!sent && !request.signal.aborted) await access.refund?.();
-        if (!request.signal.aborted) send({ type: 'error', ...errorInfo(err) });
+        // A server-side failure before half the cards were written: the deck
+        // doesn't count (the cards so far stay with the player). A deck the
+        // player walked away from does (the AI call was already paid for).
+        if (sent < count / 2 && !request.signal.aborted) await access.refund?.();
+        const gone = request.signal.aborted;
+        if (!gone) send({ type: 'error', ...errorInfo(err) });
+        await logProblem({
+          route: 'deck',
+          kind: gone ? 'disconnected' : errorInfo(err).error,
+          code: body.code,
+          detail: `${sent}/${count} cards${gone ? '' : ` · ${err.message}`}`,
+        });
       } finally {
         clearInterval(ping);
         try { controller.close(); } catch { /* client already gone */ }

@@ -243,3 +243,4 @@
 .tc-app .ta-row__acts { flex: none; display: flex; gap: 6px; }
 .tc-app .ta-row__acts .tl-btn { height: 40px; width: auto; padding: 0 12px; font-size: 11px; border-radius: 12px; }
 .tc-app .tc-out { margin: 14px 24px 0; }
+.tc-app .ta-row__main b.ta-row__problem { letter-spacing: 0; color: var(--pink); }

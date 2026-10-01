@@ -227,7 +227,8 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
       writeJson(CODE_KEY, data.code);
       setPass(data);
     } catch (e) {
-      setCodeError(e.code ? e : { message: e.message });
+      // fetch itself failing (no answer at all) means a bad connection.
+      setCodeError(e.code ? e : connectionLost());
       setPass(null);
     }
   };
@@ -338,13 +339,16 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
     setMeta(null);
     const ctrl = new AbortController();
     liveAbort.current = ctrl;
-    setDeck({ id: nextId(), name: '', cards: [] });
     setSpares([]);
     rejected.current = [];
     deckId.current = null;
     setSwapsLeft(null);
     setWriting({ total: count });
     const release = await keepAwake();
+    // Mirror of what's on screen, so the deck can be saved the moment
+    // writing ends, without waiting for "Save & play".
+    const local = { id: nextId(), name: '', cards: [] };
+    setDeck({ ...local });
     let got = 0;
     try {
       const picked = set.questions
@@ -355,11 +359,19 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
         if (m.type === 'deck') {
           deckId.current = m.id;
           setPass((p) => p && { ...p, left: m.left });
-        } else if (m.type === 'name') setDeck((d) => ({ ...d, name: m.name }));
-        else if (m.type === 'card') { got += 1; setDeck((d) => ({ ...d, cards: [...d.cards, aiCard(m.text)] })); }
-        else if (m.type === 'fix') {
+        } else if (m.type === 'name') {
+          local.name = m.name;
+          setDeck((d) => ({ ...d, name: m.name }));
+        } else if (m.type === 'card') {
+          got += 1;
+          const c = aiCard(m.text);
+          local.cards = [...local.cards, c];
+          setDeck((d) => ({ ...d, cards: [...d.cards, c] }));
+        } else if (m.type === 'fix') {
           reject(m.from);
-          setDeck((d) => ({ ...d, cards: d.cards.map((c) => (c.en === m.from ? aiCard(m.text) : c)) }));
+          const c = aiCard(m.text);
+          local.cards = local.cards.map((x) => (x.en === m.from ? c : x));
+          setDeck((d) => ({ ...d, cards: d.cards.map((x) => (x.en === m.from ? c : x)) }));
         } else if (m.type === 'done') setMeta(m.meta);
         else if (m.type === 'error') throw apiError(m, s.errorGeneric);
       });
@@ -372,6 +384,9 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
       if (!admin && deckId.current) refreshPass();
     } finally {
       release();
+      // Every written deck lands in "My decks" at once, so a reload, a closed
+      // tab or a second deck can't lose it. "Save & play" later just updates it.
+      if (got) storeDeck(local);
       if (liveAbort.current === ctrl) {
         liveAbort.current = null;
         setWriting(null);
@@ -436,21 +451,30 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
 
   const dismissTip = () => { setTipSeen(true); writeJson(TIP_KEY, true); };
 
-  const saveAndPlay = () => {
+  // Puts a deck into "My decks" (new or updated) and returns the entry.
+  // A deck already saved keeps its language, source and 18+ mark.
+  const storeDeck = (d) => {
+    const prev = readJson(DECKS_KEY, []).find((x) => x.id === d.id);
     const entry = {
-      id: deck.id,
-      name: deck.name.trim() || set.name[textLang] || s.deckTitle,
+      id: d.id,
+      name: d.name.trim() || set.name[textLang] || s.deckTitle,
       // AI decks are written in the chosen language; mock decks are EN or LT.
-      lang: set.id === 'ai' && lang !== 'other' ? lang : textLang,
-      setId: set.id,
-      // An edited saved deck keeps its 18+ mark.
-      adult: (set.id === 'ai' && adultOn) || Boolean(saved.find((d) => d.id === deck.id)?.adult),
-      cards: deck.cards.map((c) => c[textLang]),
+      lang: prev?.lang ?? (set.id === 'ai' && lang !== 'other' ? lang : textLang),
+      setId: prev?.setId ?? set.id,
+      adult: prev?.adult ?? (set.id === 'ai' && adultOn),
+      cards: d.cards.map((c) => c[textLang]),
       savedAt: Date.now(),
     };
-    const next = [entry, ...saved.filter((d) => d.id !== entry.id)];
-    setSaved(next);
-    writeJson(DECKS_KEY, next);
+    setSaved((list) => {
+      const next = [entry, ...list.filter((x) => x.id !== entry.id)];
+      writeJson(DECKS_KEY, next);
+      return next;
+    });
+    return entry;
+  };
+
+  const saveAndPlay = () => {
+    const entry = storeDeck(deck);
     setPlaying(entry);
     setCardIdx(0);
     setStep(3);
@@ -482,6 +506,20 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
 
   // An 18+ deck opens with a card that explains the *flamingo* word.
   const playDeck = playing?.adult ? { ...playing, cards: [s.flamingoIntro, ...playing.cards] } : playing;
+
+  // Leaving while Tralala writes stops the deck, and it still counts.
+  const aiWriting = ai && Boolean(writing);
+  const goBack = () => {
+    if (aiWriting && !window.confirm(s.stopWriting)) return;
+    stopLive();
+    setStep(editing && step === 2 ? 3 : step - 1);
+  };
+  useEffect(() => {
+    if (!aiWriting) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [aiWriting]);
 
   const canGoTo = (i) => i < step && !busy && !writing && i !== 3 && !editing;
 
@@ -591,7 +629,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
         {!busy && (
           <footer className="tl-pad tc-foot">
             {step > 0 && step < 3 && (
-              <button className="tl-icon-btn" onClick={() => { stopLive(); setStep(editing && step === 2 ? 3 : step - 1); }} aria-label={s.back}>←</button>
+              <button className="tl-icon-btn" onClick={goBack} aria-label={s.back}>←</button>
             )}
             {step === 0 && (
               <button className="tl-btn tl-btn--primary" disabled={idea.trim().length < 8 || outOfDecks} onClick={goClarify}>{s.makeIt}</button>
