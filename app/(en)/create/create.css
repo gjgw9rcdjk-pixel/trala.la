@@ -1,0 +1,245 @@
+/* /create prototype only. Everything is scoped under .tc-app, which lives
+   inside .tl-shell, so the game's tokens apply and nothing leaks out. */
+
+.tc-app .tc-top {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 24px 24px 0;
+}
+.tc-app .tc-wordmark { font-size: 20px; text-decoration: none; }
+.tc-app .tc-proto {
+  padding: 4px 8px; border-radius: 6px; background: rgba(255, 201, 60, .14);
+  font: 800 10px var(--body); letter-spacing: .14em; color: var(--yellow);
+}
+.tc-app .tc-ui-lang {
+  margin-left: auto; display: flex; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, .1);
+}
+.tc-app .tc-ui-lang button {
+  min-width: 40px; height: 32px; border-radius: 999px;
+  font: 800 11px var(--body); letter-spacing: .1em; color: var(--t2);
+}
+.tc-app .tc-ui-lang button[aria-pressed="true"] { background: var(--card); color: var(--ink); }
+
+/* ── progress: 4 labelled segments ─────────────────── */
+.tc-app .tc-steps { flex: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 18px 24px 12px; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+.tc-app .tc-step { display: flex; flex-direction: column; gap: 7px; text-align: left; padding: 0; }
+.tc-app .tc-step__bar { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .12); transition: background .3s; }
+.tc-app .tc-step__label { font: 800 10px var(--body); letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; color: var(--t4); }
+.tc-app .tc-step[data-state="done"] .tc-step__bar { background: var(--pink); opacity: .55; }
+.tc-app .tc-step[data-state="done"] .tc-step__label { color: var(--t2); }
+.tc-app .tc-step[data-state="done"]:not(:disabled) { cursor: pointer; }
+.tc-app .tc-step[data-state="current"] .tc-step__bar { background: var(--pink); box-shadow: 0 0 10px rgba(255, 78, 125, .6); }
+.tc-app .tc-step[data-state="current"] .tc-step__label { color: var(--card); }
+
+/* ── layout ────────────────────────────────────────── */
+.tc-app .tc-scroll { overscroll-behavior: contain; }
+.tc-app .tc-body { display: flex; flex-direction: column; padding: 0 24px 24px; }
+.tc-app .tc-head { padding: 20px 0 18px; }
+.tc-app .tc-head .tl-title { font-size: 28px; line-height: 1.08; overflow-wrap: break-word; }
+.tc-app .tc-foot { display: flex; gap: 10px; border-top: 1px solid rgba(255, 255, 255, .06); background: var(--ground); }
+.tc-app .tc-foot .tl-btn { flex: 1; width: auto; }
+
+.tc-app .tc-label {
+  display: block; margin: 22px 0 10px;
+  font: 800 11px var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--t4);
+}
+.tc-app .tc-label--ai { margin-top: 0; color: var(--pink); }
+
+.tc-app .tc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tc-app .tc-chip { text-transform: none; letter-spacing: 0; font-size: 13px; padding: 10px 14px; }
+.tc-app .tc-other { margin-top: 10px; }
+.tc-app input.tl-field, .tc-app textarea.tl-field { font-size: 16px; } /* no iOS zoom on focus */
+
+/* ── thinking (loading) ────────────────────────────── */
+.tc-app .tc-thinking { padding: 56px 24px 24px; }
+.tc-app .tc-thinking__dots { display: flex; gap: 8px; margin-bottom: 22px; }
+.tc-app .tc-thinking__dots span {
+  width: 12px; height: 12px; border-radius: 50%; background: var(--pink);
+  box-shadow: 0 0 10px rgba(255, 78, 125, .7);
+  animation: tc-bounce 1s ease-in-out infinite;
+}
+.tc-app .tc-thinking__dots span:nth-child(2) { animation-delay: .15s; background: var(--yellow); box-shadow: 0 0 10px rgba(255, 201, 60, .6); }
+.tc-app .tc-thinking__dots span:nth-child(3) { animation-delay: .3s; background: var(--blue); box-shadow: 0 0 10px rgba(63, 169, 255, .6); }
+@keyframes tc-bounce { 0%, 100% { transform: translateY(0); opacity: .6; } 50% { transform: translateY(-8px); opacity: 1; } }
+.tc-app .tc-skeleton { display: flex; flex-direction: column; gap: 10px; margin-top: 28px; }
+.tc-app .tc-skeleton span {
+  height: 56px; border-radius: 16px; background: var(--raised); border: 1px solid var(--raised-border);
+  animation: tc-pulse 1.4s ease-in-out infinite;
+}
+@keyframes tc-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+
+/* ── 2 · clarify ───────────────────────────────────── */
+.tc-app .tc-refined { min-height: 120px; resize: none; overflow: hidden; line-height: 1.5; }
+.tc-app .tc-q { margin: 22px 0 0; padding: 0; border: 0; min-width: 0; }
+.tc-app .tc-q__title { padding: 0; margin-bottom: 10px; font: 800 17px var(--display); letter-spacing: -.02em; color: var(--card); }
+.tc-app .tc-q__note { margin: -4px 0 10px; font-size: 14px; line-height: 1.4; color: var(--card); opacity: .7; }
+.tc-app .tc-q__note .tl-flamingo { color: var(--pink); }
+.tc-app .tc-q__opts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ── 3 · deck ──────────────────────────────────────── */
+.tc-app .tc-name { font: 800 18px var(--display); letter-spacing: -.01em; }
+.tc-app .tc-note { margin-top: 12px; }
+.tc-app .tc-tip {
+  margin-top: 14px; display: flex; align-items: center; gap: 12px;
+  border-radius: 16px; padding: 12px 12px 12px 16px;
+  background: var(--card); color: var(--ink); font: 700 13px/1.4 var(--body);
+  animation: tc-in .3s ease-out;
+}
+.tc-app .tc-tip__icon { font: 800 16px var(--body); color: var(--pink-on-card); letter-spacing: -2px; }
+.tc-app .tc-tip button {
+  margin-left: auto; flex: none; padding: 9px 12px; border-radius: 10px;
+  background: var(--ink); color: var(--card); font: 800 11px var(--body); letter-spacing: .08em; text-transform: uppercase;
+}
+@keyframes tc-in { from { opacity: 0; transform: translateY(-6px); } }
+.tc-app .tc-meta { margin: 20px 0 10px; font: 800 11px var(--body); letter-spacing: .16em; text-transform: uppercase; color: var(--t4); }
+.tc-app .tc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tc-app .tc-row {
+  position: relative; display: flex; align-items: center; gap: 6px;
+  min-height: 64px; padding: 8px 6px 8px 2px; border-radius: 16px;
+  background: var(--raised); border: 1px solid var(--raised-border);
+  transition: box-shadow .15s, background .15s;
+}
+.tc-app .tc-row[data-dragging] {
+  z-index: 2; background: var(--sheet); border-color: rgba(255, 78, 125, .6);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .55), 0 0 0 1px var(--pink);
+}
+.tc-app .tc-row[data-swapping] .tc-row__q { color: var(--t3); animation: tc-pulse .7s ease-in-out infinite; }
+.tc-app .tc-row__handle {
+  flex: none; width: 36px; height: 48px; border-radius: 10px;
+  font: 800 16px var(--body); letter-spacing: -2px; color: var(--t4);
+  touch-action: none; cursor: grab;
+}
+.tc-app .tc-row[data-dragging] .tc-row__handle { cursor: grabbing; color: var(--pink); }
+.tc-app .tc-row__n { flex: none; width: 20px; font: 800 12px var(--body); color: var(--pink); }
+.tc-app .tc-row__q { flex: 1; min-width: 0; margin: 0; font: 600 14px/1.4 var(--body); color: var(--card); text-wrap: pretty; }
+.tc-app .tc-row__acts { flex: none; display: flex; }
+.tc-app .tc-row__acts button {
+  width: 40px; height: 44px; border-radius: 10px;
+  font: 700 15px var(--body); color: var(--t3);
+}
+.tc-app .tc-row__acts .tc-row__swap { color: var(--yellow); }
+.tc-app .tc-row__acts button:disabled { opacity: .4; }
+
+/* ── 4 · play ──────────────────────────────────────── */
+.tc-app .tc-card-area { flex: none; padding: 4px 6px 22px; }
+.tc-app .tc-card { min-height: 300px; display: flex; flex-direction: column; }
+.tc-app .tc-card .tl-card__q { flex: 1; font-size: 28px; }
+.tc-app .tc-card .tl-card__q--m { font-size: 25px; }
+.tc-app .tc-card .tl-card__q--s { font-size: 22px; }
+.tc-app .tc-decks-toggle { margin-top: 4px; height: 58px; cursor: pointer; }
+.tc-app .tc-decks-toggle__label { font: 800 14px var(--body); color: var(--card); }
+.tc-app .tc-decks-toggle__count {
+  min-width: 24px; height: 24px; padding: 0 7px; border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--pink); color: var(--white); font: 800 12px var(--body);
+}
+.tc-app .tc-decks-toggle__chev { margin-left: auto; font: 700 18px var(--body); color: var(--t3); transition: transform .2s; }
+.tc-app .tc-decks-toggle[aria-expanded="true"] .tc-decks-toggle__chev { transform: rotate(180deg); }
+.tc-app .tc-saved { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; animation: tc-in .2s ease-out; }
+.tc-app .tc-saved__row { height: 56px; cursor: pointer; }
+.tc-app .tc-saved__row:disabled { cursor: default; border-color: var(--pink); }
+.tc-app .tc-saved__name { font: 800 14px var(--body); color: var(--card); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-app .tc-saved__count { margin-left: auto; flex: none; font: 600 12px var(--body); color: var(--t3); }
+.tc-app .tc-saved__go { flex: none; min-width: 64px; text-align: right; font: 800 12px var(--body); letter-spacing: .06em; color: var(--pink); }
+.tc-app .tc-saved__row:disabled .tc-saved__go { color: var(--t4); }
+.tc-app .tc-local { margin-top: 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tc-app *, .tc-app *::before, .tc-app *::after { animation: none !important; transition: none !important; }
+}
+.tc-app .tc-lang { margin-top: 22px; }
+
+/* ── card count slider (15–50) ─────────────────────── */
+.tc-app .tc-count { display: flex; align-items: baseline; justify-content: space-between; }
+.tc-app .tc-count__value { font: 800 28px var(--display); letter-spacing: -.02em; color: var(--card); }
+.tc-app .tc-range {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 36px; margin: 2px 0 0;
+  background: transparent; cursor: pointer; touch-action: pan-y;
+}
+.tc-app .tc-range::-webkit-slider-runnable-track {
+  height: 8px; border-radius: 4px;
+  background: linear-gradient(to right, var(--pink) var(--fill), rgba(255, 255, 255, .12) var(--fill));
+}
+.tc-app .tc-range::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .12); }
+.tc-app .tc-range::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--pink); }
+.tc-app .tc-range::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
+  background: var(--card); border: 0; box-shadow: 0 0 0 4px rgba(255, 78, 125, .35), 0 4px 10px rgba(0, 0, 0, .5);
+}
+.tc-app .tc-range::-moz-range-thumb {
+  width: 28px; height: 28px; border-radius: 50%; border: 0;
+  background: var(--card); box-shadow: 0 0 0 4px rgba(255, 78, 125, .35), 0 4px 10px rgba(0, 0, 0, .5);
+}
+.tc-app .tc-range:focus-visible { outline: none; }
+.tc-app .tc-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--pink); }
+.tc-app .tc-range__ends { display: flex; justify-content: space-between; font: 700 11px var(--body); color: var(--t4); }
+
+/* prev / next under the card */
+.tc-app .tc-nav { display: flex; align-items: center; justify-content: space-between; margin: 0 0 18px; }
+.tc-app .tc-nav .tl-icon-btn { height: 52px; width: 64px; font-size: 20px; }
+.tc-app .tc-nav__count { font: 800 13px var(--body); letter-spacing: .08em; color: var(--t2); }
+
+/* ── prototype mode bar (Mock / AI, model) ─────────── */
+.tc-app .tc-mode { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 24px 0; flex-wrap: wrap; }
+.tc-app .tc-seg { display: flex; padding: 3px; border-radius: 10px; background: rgba(255, 255, 255, .08); }
+.tc-app .tc-seg button { height: 26px; padding: 0 10px; border-radius: 8px; font: 800 11px var(--body); color: var(--t2); }
+.tc-app .tc-seg button[aria-pressed="true"] { background: var(--yellow); color: var(--ink); }
+.tc-app .tc-mode__note { font: 600 11px var(--body); color: var(--t4); }
+.tc-app .tc-wait { margin-top: 10px; }
+.tc-app .tc-err { margin: 16px 24px 0; }
+.tc-app .tc-err > div { flex: 1; min-width: 0; }
+.tc-app .tc-err > button { flex: none; width: 32px; height: 32px; color: var(--t3); }
+.tc-app .tc-meta-cost { margin: 14px 24px 0; font: 700 11px var(--body); letter-spacing: .04em; color: var(--yellow); }
+
+/* ── live writing (cards appear one by one) ────────── */
+.tc-app .tc-live { margin: 20px 0 10px; display: flex; align-items: center; gap: 12px; }
+.tc-app .tc-live__label { flex: none; font: 800 11px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--pink); }
+.tc-app .tc-live__bar { flex: 1; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; }
+.tc-app .tc-live__bar > span { display: block; height: 100%; border-radius: 3px; background: var(--pink); box-shadow: 0 0 8px rgba(255, 78, 125, .6); transition: width .4s ease-out; }
+.tc-app .tc-row--live { animation: tc-card-in .45s cubic-bezier(.2, .8, .3, 1); }
+@keyframes tc-card-in {
+  0% { opacity: 0; transform: translateY(14px) scale(.97); border-color: var(--pink); }
+  60% { border-color: rgba(255, 78, 125, .6); }
+  100% { opacity: 1; transform: none; }
+}
+.tc-app .tc-row--live .tc-row__handle { visibility: hidden; }
+.tc-app .tc-row--ghost { min-height: 64px; padding-left: 38px; background: transparent; border-style: dashed; border-color: rgba(255, 255, 255, .1); gap: 10px; }
+.tc-app .tc-ghost-text { flex: 1; height: 12px; margin-right: 40px; border-radius: 6px; background: rgba(255, 255, 255, .06); }
+.tc-app .tc-typing { display: flex; gap: 5px; }
+.tc-app .tc-typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--pink); animation: tc-bounce 1s ease-in-out infinite; }
+.tc-app .tc-typing span:nth-child(2) { animation-delay: .15s; }
+.tc-app .tc-typing span:nth-child(3) { animation-delay: .3s; }
+.tc-app .tc-ghost-line { height: 55px; display: flex; align-items: center; }
+.tc-app .tc-ghost-line span { width: 55%; height: 14px; border-radius: 7px; background: rgba(255, 255, 255, .1); animation: tc-pulse 1.4s ease-in-out infinite; }
+.tc-app .tc-name:disabled { opacity: 1; color: var(--card); }
+.tc-app .tc-row__acts[hidden] { display: none; }
+.tc-app .tc-prep { flex: 1; min-width: 0; font: 600 13px/1.4 var(--body); color: var(--t2); animation: tc-prep-in .5s ease-out; }
+@keyframes tc-prep-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* ── promo code ────────────────────────────────────── */
+.tc-app .tc-code-input { font: 800 22px var(--body) !important; letter-spacing: .14em; text-transform: uppercase; text-align: center; }
+.tc-app .tc-code-note { margin-top: 14px; }
+.tc-app .tc-pass {
+  display: flex; align-items: center; gap: 10px; margin: 14px 24px 0;
+  font: 700 12px var(--body); color: var(--t2);
+}
+.tc-app .tc-pass b { color: var(--card); }
+.tc-app .tc-pass .tl-link { margin-left: auto; }
+
+/* ── /create/admin ─────────────────────────────────── */
+.tc-app .ta-create { margin-top: 20px; }
+.tc-app .ta-new { margin-top: 20px; padding: 18px; border-radius: 16px; background: var(--raised); border: 1px solid var(--pink); }
+.tc-app .ta-new .tc-label { margin-top: 0; }
+.tc-app .ta-new__code { font: 800 32px var(--body); letter-spacing: .12em; color: var(--card); }
+.tc-app .ta-new__link { margin: 10px 0 14px; font: 600 12px/1.5 var(--body); color: var(--t2); overflow-wrap: anywhere; }
+.tc-app .ta-new__acts { display: flex; gap: 10px; }
+.tc-app .ta-new__acts .tl-btn { flex: 1; }
+.tc-app .ta-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tc-app .ta-row { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-radius: 14px; background: var(--raised); border: 1px solid var(--raised-border); }
+.tc-app .ta-row[data-status]:not([data-status="Active"]) { opacity: .55; }
+.tc-app .ta-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tc-app .ta-row__main b { font: 800 15px var(--body); letter-spacing: .08em; color: var(--card); }
+.tc-app .ta-row__main span { font: 600 13px var(--body); color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-app .ta-row__main small { font: 600 11px var(--body); color: var(--t4); }
+.tc-app .ta-row__acts { flex: none; display: flex; gap: 6px; }
+.tc-app .ta-row__acts .tl-btn { height: 40px; width: auto; padding: 0 12px; font-size: 11px; border-radius: 12px; }
+.tc-app .tc-out { margin: 14px 24px 0; }

@@ -1,6 +1,6 @@
 import { Archivo, IBM_Plex_Mono, Instrument_Serif, Plus_Jakarta_Sans } from 'next/font/google';
-import { Analytics } from '@vercel/analytics/react';
 import { SITE_TITLE, SITE_DESCRIPTION } from '@/lib/seo';
+import SiteAnalytics from './SiteAnalytics';
 import './globals.css';
 
 const mono = IBM_Plex_Mono({
@@ -61,7 +61,7 @@ export default function RootShell({ lang, children }) {
     <html lang={lang} className={`${mono.variable} ${serif.variable} ${archivo.variable} ${jakarta.variable}`}>
       <body>
         {children}
-        <Analytics />
+        <SiteAnalytics />
       </body>
     </html>
   );

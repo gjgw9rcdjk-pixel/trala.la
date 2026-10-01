@@ -380,8 +380,7 @@ button.tl-wordmark { padding: 6px 0; line-height: 1; }
 .tl-tile--dashed { background: transparent; border: 1.5px dashed rgba(255, 255, 255, .3); color: var(--card); }
 .tl-tile[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--card); }
 .tl-tile--all { background: var(--card); }
-.tl-tile--soon { cursor: default; opacity: .8; }
-.tl-tile--soon:active { transform: none; }
+.tl-tile--link { text-decoration: none; }
 .tl-tile--all[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--pink); }
 .tl-tile__glyph { font: 800 22px var(--display); }
 .tl-tile__name { display: block; font: 800 13px var(--body); }
