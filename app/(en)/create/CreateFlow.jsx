@@ -1,13 +1,15 @@
 'use client';
 
-// AI deck generator — prototype. Four screens (Idea → Refine → Deck → Play).
-// Two modes, switched in the bar under the header: "Mock" uses ./mockData.js
-// and a timer (free), "AI" calls app/api/create/* (Claude, costs money).
+// AI deck generator. Four screens (Idea → Refine → Deck → Play).
+// Players unlock it with a promo code (app/api/create/codes.js); one deck
+// uses one generation from the code. The owner (admin, ?key=...) skips the
+// code and gets the prototype bar: "Mock" uses ./mockData.js and a timer
+// (free), "AI" calls app/api/create/* (Claude, costs money).
 // Reuses the game's look (app/game/game.css, scoped to .tl-shell) plus a few
 // page-only rules in ./create.css (scoped to .tc-app).
 
 import { useEffect, useRef, useState } from 'react';
-import { qSizeClass } from '@/app/game/parts';
+import { QText, qSizeClass } from '@/app/game/parts';
 import { CREATE_STRINGS, DECK_LANGS, STEPS } from './strings';
 import { DECK_SIZE, MOCK_SETS, setForIdea } from './mockData';
 import '@/app/game/game.css';
@@ -16,6 +18,7 @@ import './create.css';
 const DECKS_KEY = 'tralala.customDecks';
 const TIP_KEY = 'tralala.create.dragTipSeen';
 const MODE_KEY = 'tralala.create.mode';
+const CODE_KEY = 'tralala.create.code';
 const THINK_MS = 1600;
 const SWAP_MS = 700;
 // Mock "live writing": name first, then one card at a time.
@@ -41,25 +44,33 @@ const toCard = ([en, lt]) => ({ id: nextId(), en, lt });
 const aiCard = (text) => ({ id: nextId(), en: text, lt: text });
 const wait = (ms) => new Promise((res) => { setTimeout(res, ms); });
 
-// POST to one of the /api/create routes; throws with a readable message.
+// An error the server sent back; `code` (e.g. "code_used_up") picks the
+// message from strings.js when there is one.
+function apiError(data, fallback) {
+  const err = new Error(data.message || fallback);
+  err.code = data.error;
+  return err;
+}
+const errText = (s, e) => s.codeErrors[e.code] || e.message || s.errorGeneric;
+
+// POST to one of the /api/create routes, with the owner's key or the
+// saved promo code; throws with a readable message.
 async function post(path, body, signal) {
   const key = new URLSearchParams(window.location.search).get('key') || '';
+  const code = readJson(CODE_KEY, '');
   let res;
   try {
     res = await fetch(`/api/create/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, key }),
+      body: JSON.stringify({ ...body, key, code }),
       signal,
     });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
     throw new Error('No connection to the server.');
   }
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.message || `Request failed (${res.status}).`);
-  }
+  if (!res.ok) throw apiError(await res.json().catch(() => ({})), `Request failed (${res.status}).`);
   return res;
 }
 
@@ -85,14 +96,15 @@ async function readLines(res, onMessage) {
   }
 }
 
-export default function CreateFlow() {
-  const [ui, setUi] = useState('en');
+export default function CreateFlow({ admin, initialUi = 'en' }) {
+  const [ui, setUi] = useState(initialUi);
   const s = CREATE_STRINGS[ui];
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   // Prototype switches: mock data vs real AI, and which model.
-  const [mode, setModeState] = useState({ source: 'mock', model: 'sonnet' });
+  // Players always get real AI on Sonnet (the server enforces the model too).
+  const [mode, setModeState] = useState(admin ? { source: 'mock', model: 'sonnet' } : { source: 'ai', model: 'sonnet' });
   const ai = mode.source === 'ai';
   const setMode = (patch) => setModeState((m) => {
     const next = { ...m, ...patch };
@@ -100,6 +112,15 @@ export default function CreateFlow() {
     return next;
   });
   const [meta, setMeta] = useState(null); // cost/time of the last AI call
+
+  // Promo code: { code, left, limit, expiresAt } once checked. `null` with
+  // passReady = no code yet (code screen). Admin doesn't need one.
+  const [pass, setPass] = useState(null);
+  const [passReady, setPassReady] = useState(admin);
+  const outOfDecks = !admin && pass?.left < 1;
+  // Server-issued id of the deck being written, needed for ↻ on a code.
+  const deckId = useRef(null);
+  const [swapsLeft, setSwapsLeft] = useState(null);
 
   // 1 · idea
   const [idea, setIdea] = useState('');
@@ -111,11 +132,20 @@ export default function CreateFlow() {
   const [set, setSet] = useState(null);
   const [refined, setRefined] = useState('');
   const [answers, setAnswers] = useState({});
+  // 18+: the clarify step offers the switch only when the idea hints at it
+  // (model hint or keywords); it stays off until the organiser turns it on.
+  const [adultHint, setAdultHint] = useState(false);
+  const [adult, setAdult] = useState(false);
+  const adultOn = adultHint && adult;
 
   // 3 · deck
   const [deck, setDeck] = useState(null); // { id, name, cards: [{id,en,lt}] }
   const [spares, setSpares] = useState([]);
   const [swapping, setSwapping] = useState(null);
+  // AI mode: cards thrown out of this deck (↻, ✕, code-check fixes), sent
+  // with every ↻ so the model doesn't bring them back.
+  const rejected = useRef([]);
+  const reject = (text) => { if (text) rejected.current = [...rejected.current, text].slice(-40); };
   // A saved deck being edited: reorder, rename and delete only, no new cards.
   const [editing, setEditing] = useState(false);
   const [tipSeen, setTipSeen] = useState(true);
@@ -143,8 +173,47 @@ export default function CreateFlow() {
   useEffect(() => {
     setTipSeen(readJson(TIP_KEY, false));
     setSaved(readJson(DECKS_KEY, []));
-    setModeState((m) => ({ ...m, ...readJson(MODE_KEY, {}) }));
-  }, []);
+    if (admin) { setModeState((m) => ({ ...m, ...readJson(MODE_KEY, {}) })); return; }
+    // A shared link carries ?code=...; take it out of the address bar at once.
+    const url = new URL(window.location.href);
+    const fromLink = url.searchParams.get('code');
+    if (fromLink) {
+      url.searchParams.delete('code');
+      window.history.replaceState(null, '', url.pathname + url.search);
+    }
+    const code = fromLink || readJson(CODE_KEY, '');
+    if (code) checkCode(code).finally(() => setPassReady(true));
+    else setPassReady(true);
+  }, [admin]);
+
+  const [codeError, setCodeError] = useState(null);
+  const checkCode = async (code) => {
+    setCodeError(null);
+    try {
+      const res = await fetch('/api/create/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw apiError(data, `Request failed (${res.status}).`);
+      writeJson(CODE_KEY, data.code);
+      setPass(data);
+    } catch (e) {
+      setCodeError(e.code ? e : { message: e.message });
+      setPass(null);
+    }
+  };
+  const forgetCode = () => {
+    try { localStorage.removeItem(CODE_KEY); } catch { /* private mode */ }
+    setPass(null);
+    setCodeError(null);
+  };
+  // A code problem in the middle of the flow updates what the page knows.
+  const onCodeProblem = (e) => {
+    if (e.code === 'code_used_up') setPass((p) => p && { ...p, left: 0 });
+    if (['code_bad', 'code_expired', 'code_off'].includes(e.code)) forgetCode();
+  };
 
   const scrollRef = useRef(null);
   useEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [step, busy]);
@@ -158,7 +227,8 @@ export default function CreateFlow() {
       if (!ai) await wait(THINK_MS);
       await work();
     } catch (e) {
-      setError(e.message || s.errorGeneric);
+      onCodeProblem(e);
+      setError(errText(s, e));
       setStep(failStep);
     } finally {
       setBusy(false);
@@ -186,14 +256,17 @@ export default function CreateFlow() {
           })),
         });
         setRefined(r.refined);
+        setAdultHint(Boolean(r.adult));
         setMeta(r.meta);
       } else {
         const hit = setForIdea(idea);
         setSet(hit);
         setRefined(hit.custom ? hit.custom : hit.refined[ui]);
+        setAdultHint(false);
         setMeta(null);
       }
       setAnswers({});
+      setAdult(false);
     }, 0);
   };
 
@@ -226,23 +299,37 @@ export default function CreateFlow() {
     liveAbort.current = ctrl;
     setDeck({ id: nextId(), name: '', cards: [] });
     setSpares([]);
+    rejected.current = [];
+    deckId.current = null;
+    setSwapsLeft(null);
     setWriting({ total: count });
     let got = 0;
     try {
       const picked = set.questions
         .map((q, i) => answers[i] != null && { question: q.q[ui], answer: q.options[answers[i]][ui] })
         .filter(Boolean);
-      const res = await post('deck', { brief: refined, answers: picked, deckLang: deckLangForAi, count, model: mode.model }, ctrl.signal);
+      const res = await post('deck', { brief: refined, answers: picked, deckLang: deckLangForAi, count, adult: adultOn, model: mode.model }, ctrl.signal);
       await readLines(res, (m) => {
-        if (m.type === 'name') setDeck((d) => ({ ...d, name: m.name }));
+        if (m.type === 'deck') {
+          deckId.current = m.id;
+          setPass((p) => p && { ...p, left: m.left });
+        } else if (m.type === 'name') setDeck((d) => ({ ...d, name: m.name }));
         else if (m.type === 'card') { got += 1; setDeck((d) => ({ ...d, cards: [...d.cards, aiCard(m.text)] })); }
-        else if (m.type === 'done') setMeta(m.meta);
-        else if (m.type === 'error') throw new Error(m.message || s.errorGeneric);
+        else if (m.type === 'fix') {
+          reject(m.from);
+          setDeck((d) => ({ ...d, cards: d.cards.map((c) => (c.en === m.from ? aiCard(m.text) : c)) }));
+        } else if (m.type === 'done') setMeta(m.meta);
+        else if (m.type === 'error') throw apiError(m, s.errorGeneric);
       });
     } catch (e) {
       if (e.name === 'AbortError') return;
-      setError(e.message || s.errorGeneric);
-      if (!got) setStep(1);
+      onCodeProblem(e);
+      setError(errText(s, e));
+      if (!got) {
+        setStep(1);
+        // The server gave the generation back; show the right count again.
+        if (deckId.current) setPass((p) => p && { ...p, left: p.left + 1 });
+      }
     } finally {
       if (liveAbort.current === ctrl) {
         liveAbort.current = null;
@@ -265,12 +352,17 @@ export default function CreateFlow() {
     try {
       const old = deck.cards.find((c) => c.id === id);
       const r = await callApi('swap', {
-        brief: refined, deckLang: deckLangForAi, model: mode.model,
-        replace: old[textLang], cards: deck.cards.map((c) => c[textLang]),
+        deckId: deckId.current, brief: refined, deckLang: deckLangForAi, adult: adultOn, model: mode.model,
+        replace: old[textLang], cards: deck.cards.map((c) => c[textLang]), rejected: rejected.current,
       });
+      reject(old[textLang]);
       setDeck((d) => ({ ...d, cards: d.cards.map((c) => (c.id === id ? aiCard(r.text) : c)) }));
+      setMeta(r.meta);
+      if (r.swapsLeft != null) setSwapsLeft(r.swapsLeft);
     } catch (e) {
-      setError(e.message || s.errorGeneric);
+      onCodeProblem(e);
+      if (e.code === 'swaps_used_up') setSwapsLeft(0);
+      setError(errText(s, e));
     } finally {
       setSwapping(null);
     }
@@ -290,7 +382,10 @@ export default function CreateFlow() {
     }, SWAP_MS);
   };
 
-  const removeCard = (id) => setDeck((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
+  const removeCard = (id) => {
+    if (ai) reject(deck.cards.find((c) => c.id === id)?.[textLang]);
+    setDeck((d) => ({ ...d, cards: d.cards.filter((c) => c.id !== id) }));
+  };
   const moveCard = (from, to) => setDeck((d) => {
     const cards = [...d.cards];
     const [c] = cards.splice(from, 1);
@@ -307,6 +402,8 @@ export default function CreateFlow() {
       // AI decks are written in the chosen language; mock decks are EN or LT.
       lang: set.id === 'ai' && lang !== 'other' ? lang : textLang,
       setId: set.id,
+      // An edited saved deck keeps its 18+ mark.
+      adult: (set.id === 'ai' && adultOn) || Boolean(saved.find((d) => d.id === deck.id)?.adult),
       cards: deck.cards.map((c) => c[textLang]),
       savedAt: Date.now(),
     };
@@ -342,7 +439,17 @@ export default function CreateFlow() {
     setStep(0); setIdea(''); setSet(null); setDeck(null); setPlaying(null); setEditing(false); setError(null); setMeta(null);
   };
 
+  // An 18+ deck opens with a card that explains the *flamingo* word.
+  const playDeck = playing?.adult ? { ...playing, cards: [s.flamingoIntro, ...playing.cards] } : playing;
+
   const canGoTo = (i) => i < step && !busy && !writing && i !== 3 && !editing;
+
+  // Waiting for the saved code to be checked: show nothing rather than flash
+  // the code screen.
+  if (!passReady) return <div className="tl-shell"><div className="tl-app tc-app" /></div>;
+  if (!admin && !pass) {
+    return <CodeScreen s={s} ui={ui} setUi={setUi} error={codeError && errText(s, codeError)} onSubmit={checkCode} />;
+  }
 
   return (
     <div className="tl-shell">
@@ -351,15 +458,18 @@ export default function CreateFlow() {
           <span className="tl-wordmark tl-wordmark--still tc-wordmark">
             Tralala<span className="tl-wordmark__tld">.cards</span>
           </span>
-          <span className="tc-proto">{s.prototype}</span>
-          <div className="tc-ui-lang" role="group" aria-label="UI language">
-            {['en', 'lt'].map((l) => (
-              <button key={l} aria-pressed={ui === l} onClick={() => setUi(l)}>{l.toUpperCase()}</button>
-            ))}
-          </div>
+          {admin && <span className="tc-proto">{s.prototype}</span>}
+          <UiLang ui={ui} setUi={setUi} />
         </header>
 
-        <div className="tc-mode" role="group" aria-label="Prototype mode">
+        {!admin && (
+          <div className="tc-pass">
+            <span><b>{s.decksLeft(pass.left)}</b> · {s.until(new Date(pass.expiresAt).toLocaleDateString(ui === 'lt' ? 'lt-LT' : 'en-GB'))}</span>
+            {!busy && !writing && <button className="tl-link" onClick={forgetCode}>{s.otherCode}</button>}
+          </div>
+        )}
+
+        {admin && <div className="tc-mode" role="group" aria-label="Prototype mode">
           <div className="tc-seg">
             {['mock', 'ai'].map((m) => (
               <button key={m} aria-pressed={mode.source === m} disabled={busy} onClick={() => setMode({ source: m })}>
@@ -377,7 +487,7 @@ export default function CreateFlow() {
             </div>
           )}
           <span className="tc-mode__note">{ai ? s.modeAi : s.modeMock}</span>
-        </div>
+        </div>}
 
         <nav className="tc-steps" aria-label="Progress">
           {STEPS.map((id, i) => (
@@ -403,9 +513,10 @@ export default function CreateFlow() {
               <button onClick={() => setError(null)} aria-label={s.dismiss}>✕</button>
             </div>
           )}
-          {meta && !busy && (step === 1 || step === 2) && !editing && (
+          {outOfDecks && step < 2 && <div className="tl-banner tc-note tc-out"><span />{s.usedUpNote}</div>}
+          {admin && meta && !busy && (step === 1 || step === 2) && !editing && (
             <p className="tc-meta-cost">
-              {meta.model} · {(meta.ms / 1000).toFixed(0)} s · ~${meta.cost.toFixed(3)}
+              {meta.model} · {(meta.ms / 1000).toFixed(0)} s · ~${meta.cost.toFixed(3)}{meta.fixed ? ` · ${meta.fixed} fixed` : ''}
             </p>
           )}
           {busy ? (
@@ -420,17 +531,18 @@ export default function CreateFlow() {
               otherLang={otherLang} setOtherLang={setOtherLang} count={count} setCount={setCount} />
           ) : step === 1 && set ? (
             <ClarifyStep s={s} ui={ui} set={set} refined={refined} setRefined={setRefined}
-              answers={answers} setAnswers={setAnswers} />
+              answers={answers} setAnswers={setAnswers} adultHint={adultHint} adult={adult} setAdult={setAdult} />
           ) : step === 2 && deck ? (
             <DeckStep s={s} deck={deck} textLang={textLang} setName={(name) => setDeck((d) => ({ ...d, name }))}
-              swapping={swapping} onSwap={editing ? null : swapCard} onRemove={removeCard} onMove={moveCard}
+              swapping={swapping} onSwap={editing || swapsLeft === 0 ? null : swapCard} onRemove={removeCard} onMove={moveCard}
               tipSeen={tipSeen} onTip={dismissTip} writing={writing}
               notes={writing ? [] : [
+                !admin && !editing && swapsLeft != null && s.swapsLeft(swapsLeft),
                 !editing && set?.id !== 'ai' && count > deck.cards.length && s.sampleNote(deck.cards.length, count),
                 set?.id !== 'ai' && textLang === 'en' && lang !== 'en' && s.langNote(langName),
               ].filter(Boolean)} />
           ) : step === 3 && playing ? (
-            <PlayStep s={s} deck={playing} idx={cardIdx} onGo={(d) => setCardIdx((i) => (i + d + playing.cards.length) % playing.cards.length)}
+            <PlayStep s={s} deck={playDeck} idx={cardIdx} onGo={(d) => setCardIdx((i) => (i + d + playDeck.cards.length) % playDeck.cards.length)}
               saved={saved} onOpen={(d) => { setPlaying(d); setCardIdx(0); }} />
           ) : null}
         </div>
@@ -441,10 +553,10 @@ export default function CreateFlow() {
               <button className="tl-icon-btn" onClick={() => { stopLive(); setStep(editing && step === 2 ? 3 : step - 1); }} aria-label={s.back}>←</button>
             )}
             {step === 0 && (
-              <button className="tl-btn tl-btn--primary" disabled={idea.trim().length < 8} onClick={goClarify}>{s.makeIt}</button>
+              <button className="tl-btn tl-btn--primary" disabled={idea.trim().length < 8 || outOfDecks} onClick={goClarify}>{s.makeIt}</button>
             )}
             {step === 1 && (
-              <button className="tl-btn tl-btn--primary" disabled={!refined.trim()} onClick={goDeck}>{s.buildDeck}</button>
+              <button className="tl-btn tl-btn--primary" disabled={!refined.trim() || outOfDecks} onClick={goDeck}>{s.buildDeck}</button>
             )}
             {step === 2 && (
               <button className="tl-btn tl-btn--primary" disabled={!!writing || !deck?.cards.length} onClick={saveAndPlay}>
@@ -454,12 +566,78 @@ export default function CreateFlow() {
             {step === 3 && (
               <>
                 <button className="tl-btn tl-btn--secondary" onClick={editPlaying}>{s.edit}</button>
-                <button className="tl-btn tl-btn--secondary" onClick={startOver}>{s.newDeck}</button>
+                <button className="tl-btn tl-btn--secondary" disabled={outOfDecks} onClick={startOver}>{s.newDeck}</button>
               </>
             )}
           </footer>
         )}
       </div>
+    </div>
+  );
+}
+
+function UiLang({ ui, setUi }) {
+  return (
+    <div className="tc-ui-lang" role="group" aria-label="UI language">
+      {['en', 'lt'].map((l) => (
+        <button key={l} aria-pressed={ui === l} onClick={() => setUi(l)}>{l.toUpperCase()}</button>
+      ))}
+    </div>
+  );
+}
+
+// ── 0 · promo code ──────────────────────────────────────────────────────
+function CodeScreen({ s, ui, setUi, error, onSubmit }) {
+  const [code, setCode] = useState('');
+  const [checking, setChecking] = useState(false);
+  const ready = code.replace(/[^a-z0-9]/gi, '').length === 8;
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!ready || checking) return;
+    setChecking(true);
+    await onSubmit(code);
+    setChecking(false);
+  };
+  return (
+    <div className="tl-shell">
+      <form className="tl-app tc-app" onSubmit={submit}>
+        <header className="tc-top">
+          <a href="/" className="tl-wordmark tl-wordmark--still tc-wordmark">
+            Tralala<span className="tl-wordmark__tld">.cards</span>
+          </a>
+          <UiLang ui={ui} setUi={setUi} />
+        </header>
+        <div className="tl-scroll tc-scroll">
+          {error && !checking && (
+            <div className="tl-error tc-err" role="alert">
+              <span>!</span>
+              <div><b>{s.errorTitle}</b><small>{error}</small></div>
+            </div>
+          )}
+          <div className="tc-body">
+            <Head title={s.codeTitle} hint={s.codeHint} />
+            <label className="tc-label" htmlFor="tc-code">{s.codeLabel}</label>
+            <input
+              id="tc-code"
+              className="tl-field tc-code-input"
+              value={code}
+              maxLength={12}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              placeholder="XXXX-XXXX"
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+            />
+            <p className="tl-note tc-code-note">{s.codeNote}</p>
+          </div>
+        </div>
+        <footer className="tl-pad tc-foot">
+          <button type="submit" className="tl-btn tl-btn--primary" disabled={!ready || checking}>
+            {checking ? s.codeChecking : s.codeGo}
+          </button>
+        </footer>
+      </form>
     </div>
   );
 }
@@ -560,7 +738,7 @@ const grow = (el) => {
   el.style.height = `${el.scrollHeight + 2}px`;
 };
 
-function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers }) {
+function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers, adultHint, adult, setAdult }) {
   return (
     <div className="tc-body">
       <Head title={s.clarifyTitle} hint={s.clarifyHint} />
@@ -589,6 +767,16 @@ function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers }) {
           </div>
         </fieldset>
       ))}
+      {adultHint && (
+        <fieldset className="tc-q">
+          <legend className="tc-q__title">{s.adultTitle}</legend>
+          <p className="tc-q__note"><QText text={s.adultNote} /></p>
+          <div className="tc-q__opts">
+            <button className="tl-chip tc-chip" aria-pressed={!adult} onClick={() => setAdult(false)}>{s.adultNo}</button>
+            <button className="tl-chip tc-chip" aria-pressed={adult} onClick={() => setAdult(true)}>{s.adultYes}</button>
+          </div>
+        </fieldset>
+      )}
     </div>
   );
 }
@@ -695,7 +883,7 @@ function DeckStep({ s, deck, textLang, setName, swapping, onSwap, onRemove, onMo
                 ⋮⋮
               </button>
               <span className="tc-row__n">{i + 1}</span>
-              <p className="tc-row__q" lang={textLang}>{swapping === c.id ? '…' : c[textLang]}</p>
+              <p className="tc-row__q" lang={textLang}>{swapping === c.id ? '…' : <QText text={c[textLang]} />}</p>
               <div className="tc-row__acts" hidden={!!writing}>
                 {onSwap && <button className="tc-row__swap" onClick={() => onSwap(c.id)} aria-label={s.swap} disabled={!!swapping}>↻</button>}
                 <button onClick={() => onRemove(c.id)} aria-label={s.remove}>✕</button>
@@ -858,7 +1046,7 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen }) {
           style={dragX ? { transform: tilt(dragX), transition: 'none' } : undefined}
         >
           <div className="tl-card__label">{deck.name}</div>
-          <p className={qSizeClass(text)} lang={deck.lang}>{text}</p>
+          <p className={qSizeClass(text)} lang={deck.lang}><QText text={text} /></p>
         </div>
       </div>
 

@@ -1,8 +1,8 @@
-// Private prototype of the AI deck generator (mock data, no AI calls yet).
-// Not linked from anywhere — reached only via /create?key=..., where the key
-// must match CREATE_PREVIEW_KEY. Anything else gets a plain 404.
+// AI deck generator. Opened from the "Make your own cards" tile in the game.
+// Players unlock it with a promo code (made on /create/admin). The owner's
+// link, /create?key=... with CREATE_PREVIEW_KEY, also shows the prototype
+// switches (mock data, model choice, cost per call) and needs no code.
 
-import { notFound } from 'next/navigation';
 import CreateFlow from './CreateFlow';
 
 export const metadata = {
@@ -11,8 +11,8 @@ export const metadata = {
 };
 
 export default async function CreatePage({ searchParams }) {
-  const { key } = await searchParams;
+  const { key, ui } = await searchParams;
   const expected = process.env.CREATE_PREVIEW_KEY;
-  if (!expected || key !== expected) notFound();
-  return <CreateFlow />;
+  const admin = Boolean(expected) && key === expected;
+  return <CreateFlow admin={admin} initialUi={ui === 'lt' ? 'lt' : 'en'} />;
 }

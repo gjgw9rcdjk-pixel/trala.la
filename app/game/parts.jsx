@@ -301,11 +301,11 @@ export function DecksScreen({ s, lang, draft, spice, timerOn, fullCount, playCou
             </span>
             {draft.length === 0 && <span className="tl-tile__check" aria-hidden="true">✓</span>}
           </button>
-          {/* Placeholder for AI-generated custom cards; not wired up yet. */}
-          <div className="tl-tile tl-tile--dashed tl-tile--soon" aria-disabled="true">
-            <span className="tl-tag">{s.soon}</span>
+          {/* AI deck generator (app/(en)/create); asks for a promo code first. */}
+          <a className="tl-tile tl-tile--dashed tl-tile--link" href={lang === 'lt' ? '/create?ui=lt' : '/create'}>
+            <span className="tl-tile__glyph" aria-hidden="true">✦</span>
             <span className="tl-tile__name">{s.makeOwn}</span>
-          </div>
+          </a>
           {visible.map((c) => (
             <DeckTile key={c.id} s={s} lang={lang} cat={c} on={draft.includes(c.id)} count={countFor(c.id, spice)} onToggle={onToggle} />
           ))}
