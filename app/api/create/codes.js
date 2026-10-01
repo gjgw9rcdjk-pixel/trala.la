@@ -10,6 +10,7 @@
 //   tralala:swaps:<CODE>:<deckId>     ↻ swaps for one deck
 //   tralala:deck:<deckId>             { adult } for a week: deck ids handed out
 //   tralala:adultok:<CODE>            clarify offered the 18+ switch (1 day)
+//   tralala:create:problems           last 200 failures (see logProblem)
 //   tralala:codefail:<ip>             wrong codes typed in the last 15 min
 //
 // Without KV env vars (local dev) everything lives in memory and resets
@@ -62,6 +63,15 @@ const store = {
     else mem.set('tralala:codes', { v: [...new Set([...(memGet('tralala:codes') || []), code])] });
   },
   index: async () => (useKv() ? kv.smembers('tralala:codes') : memGet('tralala:codes') || []),
+  async push(k, v, max) {
+    if (useKv()) {
+      await kv.lpush(k, v);
+      await kv.ltrim(k, 0, max - 1);
+    } else {
+      mem.set(k, { v: [v, ...(memGet(k) || [])].slice(0, max) });
+    }
+  },
+  list: async (k, n) => (useKv() ? kv.lrange(k, 0, n - 1) : (memGet(k) || []).slice(0, n)),
 };
 
 const recKey = (code) => `tralala:code:${code}`;
@@ -198,4 +208,30 @@ export async function takeSwap(raw, ip, deckId) {
     throw new CodeError('swaps_used_up');
   }
   return { swapsLeft: SWAPS_PER_DECK - n, adult: Boolean(deck.adult), refund: () => store.decr(swapsKey(code, id)) };
+}
+
+// ── failures, for the admin page ────────────────────────────────────────
+// Vercel keeps runtime logs for about an hour, so failures are also kept
+// here: what broke, where, on which code, how far the deck got. No idea
+// text or cards are stored.
+const PROBLEMS_KEY = 'tralala:create:problems';
+const PROBLEMS_MAX = 200;
+
+export async function logProblem({ route, kind, code, detail }) {
+  try {
+    await store.push(PROBLEMS_KEY, {
+      at: Date.now(),
+      route,
+      kind,
+      code: normalizeCode(code) || null,
+      detail: String(detail ?? '').slice(0, 200),
+    }, PROBLEMS_MAX);
+  } catch (err) {
+    console.error('[create] could not log problem', err);
+  }
+}
+
+export async function listProblems(n = 50) {
+  const rows = await store.list(PROBLEMS_KEY, n);
+  return rows.map((r) => (typeof r === 'string' ? JSON.parse(r) : r));
 }

@@ -4,7 +4,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { kv } from '@vercel/kv';
-import { CodeError, clientIp } from './codes';
+import { CodeError, clientIp, logProblem } from './codes';
 
 const client = new Anthropic();
 
@@ -139,6 +139,7 @@ export async function gate(request, check) {
   }
   if (await overDailyLimit()) {
     await access.refund?.();
+    await logProblem({ route: new URL(request.url).pathname.split('/').pop(), kind: 'daily_limit', code: body.code });
     return { response: Response.json({ error: 'daily_limit', message: 'Daily limit reached. Try again tomorrow.' }, { status: 429 }) };
   }
   return { body, access };
@@ -152,6 +153,9 @@ export async function handle(request, run, check) {
     return Response.json(await run(body, access));
   } catch (err) {
     await access.refund?.();
+    if (!(err instanceof CodeError)) {
+      await logProblem({ route: new URL(request.url).pathname.split('/').pop(), kind: errorInfo(err).error, code: body.code, detail: err.message });
+    }
     return errorResponse(err);
   }
 }
