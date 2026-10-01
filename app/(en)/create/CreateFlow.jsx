@@ -53,6 +53,26 @@ function apiError(data, fallback) {
 }
 const errText = (s, e) => s.codeErrors[e.code] || e.message || s.errorGeneric;
 
+// The phone dropped the connection (screen locked, app switched, signal
+// lost). Safari says "Load failed", Chrome "Failed to fetch"; both are a
+// TypeError from fetch or from reading the stream.
+function connectionLost() {
+  const err = new Error('The connection dropped.');
+  err.code = 'connection_lost';
+  return err;
+}
+
+// Keeps the screen from going dark while Tralala writes, so the phone
+// doesn't cut the connection. Returns a function that lets it sleep again.
+async function keepAwake() {
+  try {
+    const lock = await navigator.wakeLock?.request('screen');
+    return () => { lock?.release().catch(() => {}); };
+  } catch {
+    return () => {};
+  }
+}
+
 // POST to one of the /api/create routes, with the owner's key or the
 // saved promo code; throws with a readable message.
 async function post(path, body, signal) {
@@ -68,7 +88,7 @@ async function post(path, body, signal) {
     });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    throw new Error('No connection to the server.');
+    throw connectionLost();
   }
   if (!res.ok) throw apiError(await res.json().catch(() => ({})), `Request failed (${res.status}).`);
   return res;
@@ -84,7 +104,14 @@ async function readLines(res, onMessage) {
   const dec = new TextDecoder();
   let buf = '';
   for (;;) {
-    const { value, done } = await reader.read();
+    let chunk;
+    try {
+      chunk = await reader.read();
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      throw connectionLost();
+    }
+    const { value, done } = chunk;
     if (done) break;
     buf += dec.decode(value, { stream: true });
     let nl;
@@ -204,6 +231,18 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
       setPass(null);
     }
   };
+  // Asks the server how many decks are really left (after a dropped
+  // connection the page can't know whether the deck was counted).
+  const refreshPass = async () => {
+    try {
+      const res = await fetch('/api/create/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: readJson(CODE_KEY, '') }),
+      });
+      if (res.ok) setPass(await res.json());
+    } catch { /* still offline; keep what we have */ }
+  };
   const forgetCode = () => {
     try { localStorage.removeItem(CODE_KEY); } catch { /* private mode */ }
     setPass(null);
@@ -223,6 +262,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
   const think = async (work, failStep) => {
     setBusy(true);
     setError(null);
+    const release = ai ? await keepAwake() : () => {};
     try {
       if (!ai) await wait(THINK_MS);
       await work();
@@ -231,6 +271,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
       setError(errText(s, e));
       setStep(failStep);
     } finally {
+      release();
       setBusy(false);
     }
   };
@@ -303,6 +344,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
     deckId.current = null;
     setSwapsLeft(null);
     setWriting({ total: count });
+    const release = await keepAwake();
     let got = 0;
     try {
       const picked = set.questions
@@ -325,12 +367,11 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
       if (e.name === 'AbortError') return;
       onCodeProblem(e);
       setError(errText(s, e));
-      if (!got) {
-        setStep(1);
-        // The server gave the generation back; show the right count again.
-        if (deckId.current) setPass((p) => p && { ...p, left: p.left + 1 });
-      }
+      if (!got) setStep(1);
+      // The server may or may not have counted the deck; ask it.
+      if (!admin && deckId.current) refreshPass();
     } finally {
+      release();
       if (liveAbort.current === ctrl) {
         liveAbort.current = null;
         setWriting(null);

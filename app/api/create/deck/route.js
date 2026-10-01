@@ -8,12 +8,15 @@
 //   {"type":"fix","from":"...","text":"..."}    (code checks found a problem
 //                                                and the card was rewritten)
 //   {"type":"done","meta":{...}}  or  {"type":"error","error":"...","message":"..."}
+// Plus an empty line every few seconds, so phones and proxies don't drop the
+// connection while the model is still thinking and nothing else is sent.
 
 import { streamJson, gate, clip, errorInfo } from '../ai';
 import { cardRules, checkCards, fixCards } from '../rules';
 import { takeGeneration } from '../codes';
 
 export const maxDuration = 300;
+const KEEPALIVE_MS = 5000;
 
 const schema = {
   type: 'object',
@@ -71,6 +74,9 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
   const stream = new ReadableStream({
     async start(controller) {
       const send = (obj) => controller.enqueue(enc.encode(`${JSON.stringify(obj)}\n`));
+      const ping = setInterval(() => {
+        try { controller.enqueue(enc.encode('\n')); } catch { /* stream closed */ }
+      }, KEEPALIVE_MS);
       let nameSent = false;
       let sent = 0;
       if (access.deckId) send({ type: 'deck', id: access.deckId, left: access.left });
@@ -113,6 +119,7 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
         if (!sent && !request.signal.aborted) await access.refund?.();
         if (!request.signal.aborted) send({ type: 'error', ...errorInfo(err) });
       } finally {
+        clearInterval(ping);
         try { controller.close(); } catch { /* client already gone */ }
       }
     },
