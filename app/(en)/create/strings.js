@@ -98,6 +98,7 @@ export const CREATE_STRINGS = {
       clarify_used_up: 'This code has asked for too many refinements. Write the deck with what you have.',
       swaps_used_up: 'No more swaps for this deck.',
       daily_limit: 'Tralala has written a lot of cards today. Try again tomorrow.',
+      connection_lost: 'The connection dropped. Keep the screen on and try again.',
     },
   },
   lt: {
@@ -190,6 +191,7 @@ export const CREATE_STRINGS = {
       clarify_used_up: 'Šiuo kodu idėja tobulinta per daug kartų. Rašyk kaladę su tuo, ką turi.',
       swaps_used_up: 'Šiai kaladei keitimų nebeliko.',
       daily_limit: 'Tralala šiandien parašė daug kortų. Bandyk rytoj.',
+      connection_lost: 'Nutrūko ryšys. Laikyk ekraną įjungtą ir bandyk dar kartą.',
     },
   },
 };
