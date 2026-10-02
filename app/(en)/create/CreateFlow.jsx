@@ -9,7 +9,7 @@
 // page-only rules in ./create.css (scoped to .tc-app).
 
 import { useEffect, useRef, useState } from 'react';
-import { QText, qSizeClass } from '@/app/game/parts';
+import { NeonFlamingo, QText, qSizeClass } from '@/app/game/parts';
 import { CREATE_STRINGS, DECK_LANGS, STEPS } from './strings';
 import { DECK_SIZE, MOCK_SETS, setForIdea } from './mockData';
 import '@/app/game/game.css';
@@ -599,10 +599,8 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
           )}
           {busy ? (
             <Thinking
-              title={step === 1 ? s.thinking : s.writing}
-              sub={step === 1 ? s.thinkingSub : s.writingSub}
+              lines={step === 1 ? s.thinkingLines : s.writingLines}
               wait={ai && step === 2 ? s.writingWait : null}
-              rows={step === 1 ? 4 : 6}
             />
           ) : step === 0 ? (
             <IdeaStep s={s} ui={ui} idea={idea} setIdea={setIdea} lang={lang} setLang={setLang}
@@ -729,16 +727,52 @@ function Head({ title, hint }) {
   );
 }
 
-function Thinking({ title, sub, wait: waitNote, rows }) {
+// Loading: the app-icon card stack shuffles; when the dark card reaches the
+// top, the neon flamingo draws itself and flickers on. The title types out
+// each of `lines` in turn; only the first one is announced to screen readers.
+const TYPE_MS = 45;
+const HOLD_MS = 2200;
+function Thinking({ lines, wait: waitNote }) {
+  const [at, setAt] = useState({ i: 0, n: 0 }); // line index, letters shown
+  useEffect(() => {
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let i = 0;
+    let n = still ? lines[0].length : 0;
+    let t;
+    const tick = () => {
+      if (n < lines[i].length) { n += 1; t = setTimeout(tick, TYPE_MS); }
+      else {
+        // The finished line stays up for HOLD_MS; with reduced motion, whole lines just swap.
+        i = (i + 1) % lines.length; n = still ? lines[i].length : 0;
+        t = setTimeout(tick, HOLD_MS);
+        if (still) setAt({ i, n });
+        return;
+      }
+      setAt({ i, n });
+    };
+    setAt({ i, n });
+    t = setTimeout(tick, still ? HOLD_MS : TYPE_MS);
+    return () => clearTimeout(t);
+  }, [lines]);
   return (
-    <div className="tc-thinking" role="status" aria-live="polite">
-      <div className="tc-thinking__dots"><span /><span /><span /></div>
-      <h2 className="tl-sheet-title">{title}</h2>
-      <p className="tl-sub">{sub}</p>
-      {waitNote && <p className="tl-note tc-wait">{waitNote}</p>}
-      <div className="tc-skeleton">
-        {Array.from({ length: rows }, (_, i) => <span key={i} style={{ animationDelay: `${i * 120}ms` }} />)}
+    <div className="tc-thinking">
+      <div className="tc-shuffle" aria-hidden="true">
+        <div className="tc-shuffle__stack">
+          <span className="tc-shuffle__card tc-shuffle__card--blue">?</span>
+          <span className="tc-shuffle__card tc-shuffle__card--yellow">?</span>
+          <span className="tc-shuffle__card tc-shuffle__card--ink"><NeonFlamingo className="tl-flamingo" /></span>
+        </div>
       </div>
+      <p className="tc-sr" role="status">{lines[0]}</p>
+      {/* the untyped rest stays in place, invisible, so lines never jump */}
+      <h2 className="tl-sheet-title tc-line" aria-hidden="true">
+        <span>
+          {lines[at.i].slice(0, at.n)}
+          <span className="tc-caret" />
+          <span className="tc-line__rest">{lines[at.i].slice(at.n)}</span>
+        </span>
+      </h2>
+      {waitNote && <p className="tl-note tc-wait">{waitNote}</p>}
     </div>
   );
 }

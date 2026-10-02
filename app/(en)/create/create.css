@@ -50,21 +50,64 @@
 .tc-app input.tl-field, .tc-app textarea.tl-field { font-size: 16px; } /* no iOS zoom on focus */
 
 /* ── thinking (loading) ────────────────────────────── */
-.tc-app .tc-thinking { padding: 56px 24px 24px; }
-.tc-app .tc-thinking__dots { display: flex; gap: 8px; margin-bottom: 22px; }
-.tc-app .tc-thinking__dots span {
-  width: 12px; height: 12px; border-radius: 50%; background: var(--pink);
-  box-shadow: 0 0 10px rgba(255, 78, 125, .7);
-  animation: tc-bounce 1s ease-in-out infinite;
+/* The app-icon stack shuffles: the top card flies off and slides to the back
+   while the others move up. When the dark card is on top, the neon flamingo
+   draws itself and flickers on, only once the card has fully landed. One loop =
+   7.5s, each card a third (2.5s) apart. */
+.tc-app .tc-thinking { display: flex; flex-direction: column; align-items: center; padding: 28px 24px 24px; text-align: center; }
+.tc-app .tc-line { min-height: 2.5em; max-width: 340px; display: flex; align-items: center; justify-content: center; }
+.tc-app .tc-line__rest { visibility: hidden; }
+.tc-app .tc-caret {
+  display: inline-block; width: 2px; height: .95em; margin: 0 1px 0 2px; vertical-align: -.1em;
+  background: var(--pink); box-shadow: 0 0 6px rgba(255, 78, 125, .8);
+  animation: tc-caret .9s steps(1) infinite;
 }
-.tc-app .tc-thinking__dots span:nth-child(2) { animation-delay: .15s; background: var(--yellow); box-shadow: 0 0 10px rgba(255, 201, 60, .6); }
-.tc-app .tc-thinking__dots span:nth-child(3) { animation-delay: .3s; background: var(--blue); box-shadow: 0 0 10px rgba(63, 169, 255, .6); }
+@keyframes tc-caret { 50% { opacity: 0; } }
+.tc-app .tc-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tc-app .tc-shuffle { width: 100%; height: 250px; display: flex; align-items: center; justify-content: center; overflow-x: clip; margin-bottom: 18px; }
+.tc-app .tc-shuffle__stack { position: relative; width: 150px; height: 190px; }
+.tc-app .tc-shuffle__card {
+  position: absolute; inset: 0; border-radius: 26px;
+  display: flex; align-items: center; justify-content: center;
+  font: 900 76px var(--display); color: var(--ink);
+  animation: tc-shuffle 7.5s cubic-bezier(.6, 0, .3, 1) infinite;
+}
+.tc-app .tc-shuffle__card--blue { background: var(--blue); }
+.tc-app .tc-shuffle__card--yellow { background: var(--yellow); animation-delay: -2.5s; }
+.tc-app .tc-shuffle__card--ink { background: var(--ink); border: 1px solid rgba(255, 255, 255, .12); animation-delay: -5s; }
+.tc-app .tc-shuffle__card--ink .tl-flamingo { animation: tc-neon-flicker 7.5s linear -5s infinite; }
+.tc-app .tc-shuffle__card--ink .tl-flamingo path,
+.tc-app .tc-shuffle__card--ink .tl-flamingo circle:not(.tl-flamingo__eye) {
+  stroke-dasharray: 1; animation: tc-neon-draw 7.5s ease-in-out -5s infinite;
+}
+.tc-app .tc-shuffle__card--ink .tl-flamingo__eye { animation: tc-neon-eye 7.5s linear -5s infinite; }
+/* 0–13% leave the top and go to the back · 33–43% back → middle · 67–76% middle → top, then hold.
+   The flamingo stays lit while its card flies off, resets once hidden at the back (14%),
+   and only starts drawing at 77%, after the card has landed on top. */
+@keyframes tc-shuffle {
+  0%, 4%     { transform: translate(0, 0) rotate(0deg); z-index: 3; }
+  13%        { transform: translate(96px, -24px) rotate(20deg); z-index: 3; }
+  14%        { transform: translate(96px, -24px) rotate(20deg); z-index: 0; }
+  24%, 33.3% { transform: translate(-10px, 0) rotate(-14deg); z-index: 1; }
+  43%, 66.6% { transform: translate(-6px, 0) rotate(-6deg); z-index: 2; }
+  76%, 100%  { transform: translate(0, 0) rotate(0deg); z-index: 3; }
+}
+@keyframes tc-neon-draw { 0%, 13% { stroke-dashoffset: 0; } 14%, 77% { stroke-dashoffset: 1; } 87%, 100% { stroke-dashoffset: 0; } }
+@keyframes tc-neon-flicker { 0%, 13% { opacity: 1; } 14%, 87% { opacity: .3; } 88% { opacity: 1; } 89.5% { opacity: .25; } 91% { opacity: 1; } 92% { opacity: .5; } 93%, 100% { opacity: 1; } }
+@keyframes tc-neon-eye { 0%, 13% { opacity: 1; } 14%, 88% { opacity: 0; } 92%, 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .tc-app .tc-shuffle__card,
+  .tc-app .tc-shuffle__card--ink .tl-flamingo,
+  .tc-app .tc-shuffle__card--ink .tl-flamingo path,
+  .tc-app .tc-shuffle__card--ink .tl-flamingo circle,
+  .tc-app .tc-caret { animation: none; stroke-dashoffset: 0; }
+  .tc-app .tc-shuffle__card--blue { transform: translate(-10px, 0) rotate(-14deg); z-index: 1; }
+  .tc-app .tc-shuffle__card--yellow { transform: translate(-6px, 0) rotate(-6deg); z-index: 2; }
+  .tc-app .tc-shuffle__card--ink { z-index: 3; }
+}
+
+/* shared by the swap row, typing dots and ghost lines below */
 @keyframes tc-bounce { 0%, 100% { transform: translateY(0); opacity: .6; } 50% { transform: translateY(-8px); opacity: 1; } }
-.tc-app .tc-skeleton { display: flex; flex-direction: column; gap: 10px; margin-top: 28px; }
-.tc-app .tc-skeleton span {
-  height: 56px; border-radius: 16px; background: var(--raised); border: 1px solid var(--raised-border);
-  animation: tc-pulse 1.4s ease-in-out infinite;
-}
 @keyframes tc-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 
 /* ── 2 · clarify ───────────────────────────────────── */
