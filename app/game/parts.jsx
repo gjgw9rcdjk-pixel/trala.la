@@ -97,12 +97,12 @@ export function qSizeClass(text) {
 export function NeonFlamingo({ className }) {
   const tube = (
     <>
-      <circle cx="40" cy="18" r="5" />
-      <path d="M35.5 19.5 Q28 19 26 25 Q25.5 29.5 28.5 30.5" />
-      <path d="M44.5 20 C51 25.5 51 34 45 40 C38.5 46.5 38.5 54 46 58.5" />
-      <path d="M44.5 60 C44.5 50 64 50 74 56 C80 59.5 83 62 89 60 C85 66.5 80.5 70 72 72 C60 76 44.5 72 44.5 60 Z" />
-      <path d="M52 60.5 Q62 57.5 72 64 Q63 69.5 54 66" />
-      <path d="M60 74 L60 118 L53 120" className="tl-flamingo__leg" />
+      <circle cx="40" cy="18" r="5" pathLength="1" />
+      <path pathLength="1" d="M35.5 19.5 Q28 19 26 25 Q25.5 29.5 28.5 30.5" />
+      <path pathLength="1" d="M44.5 20 C51 25.5 51 34 45 40 C38.5 46.5 38.5 54 46 58.5" />
+      <path pathLength="1" d="M44.5 60 C44.5 50 64 50 74 56 C80 59.5 83 62 89 60 C85 66.5 80.5 70 72 72 C60 76 44.5 72 44.5 60 Z" />
+      <path pathLength="1" d="M52 60.5 Q62 57.5 72 64 Q63 69.5 54 66" />
+      <path pathLength="1" d="M60 74 L60 118 L53 120" className="tl-flamingo__leg" />
     </>
   );
   return (

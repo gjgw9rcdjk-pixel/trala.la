@@ -20,7 +20,8 @@ export const CREATE_STRINGS = {
     makeIt: 'Refine my idea',
     // 2 · clarify
     thinking: 'Tralala is thinking…',
-    thinkingSub: 'Tralala is reading your idea and picking the questions that matter.',
+    // Loading screen titles; they take turns every few seconds.
+    thinkingLines: ['Tralala is reading your idea…', 'Hmm, interesting idea…', 'Tralala is getting into it…'],
     clarifyTitle: 'Let’s sharpen it',
     clarifyHint: 'Tralala tidied up your idea. Edit anything it got wrong, then answer a few quick ones.',
     refined: 'Your idea, refined',
@@ -31,7 +32,14 @@ export const CREATE_STRINGS = {
     adultYes: 'Yes, 18+',
     // 3 · deck
     writing: 'Tralala is writing your cards…',
-    writingSub: 'Tralala drafts the cards, then checks each one against its house rules.',
+    writingLines: [
+      'Tralala is finding the best questions.',
+      'Building your own personal card collection.',
+      'Boring questions out, only good ones stay.',
+      'Checking every question is worth your night.',
+      'Nobody else has a deck like this.',
+      'Your one-of-a-kind deck is almost ready.',
+    ],
     deckTitle: 'Your deck',
     deckHint: 'Drag to reorder, ↻ to swap a card, ✕ to drop it.',
     deckEditHint: 'Drag to reorder, ✕ to drop a card.',
@@ -61,7 +69,7 @@ export const CREATE_STRINGS = {
     prototype: 'PROTOTYPE',
     modeMock: 'Sample data, free',
     modeAi: 'Real AI, costs money',
-    writingWait: 'A big deck can take up to a minute.',
+    writingWait: 'A big deck can take up to a minute. Perfect time to pour some tea.',
     writingPrep: 'Tralala is weighing ideas and picking the best. Cards start appearing in a moment.',
     prepLines: [
       'Reading your answers…',
@@ -117,7 +125,7 @@ export const CREATE_STRINGS = {
     cards: 'kortų',
     makeIt: 'Patobulinti idėją',
     thinking: 'Tralala galvoja…',
-    thinkingSub: 'Tralala skaito tavo idėją ir renkasi svarbiausius klausimus.',
+    thinkingLines: ['Tralala skaito tavo idėją…', 'Hmm, įdomi mintis…', 'Tralala įsijaučia…'],
     clarifyTitle: 'Patikslinkime',
     clarifyHint: 'Tralala sutvarkė tavo idėją. Pataisyk, jei kažką suprato ne taip, ir atsakyk į kelis klausimus.',
     refined: 'Tavo idėja, patobulinta',
@@ -127,7 +135,14 @@ export const CREATE_STRINGS = {
     adultNo: 'Ne',
     adultYes: 'Taip, 18+',
     writing: 'Tralala rašo tavo kortas…',
-    writingSub: 'Tralala rašo kortas, tada kiekvieną tikrina pagal savo taisykles.',
+    writingLines: [
+      'Tralala galvoja geriausius klausimus.',
+      'Kuriama tavo asmeninė kortų kolekcija.',
+      'Nuobodūs klausimai keliauja lauk, lieka tik geri.',
+      'Tikrina, ar kiekvienas klausimas vertas jūsų vakaro.',
+      'Tokios kaladės dar niekas neturi.',
+      'Tuoj turėsi savo vienintelę kortų kaladę.',
+    ],
     deckTitle: 'Tavo kaladė',
     deckHint: 'Tempk, kad perkeltum, ↻ pakeisk kortą, ✕ ištrink.',
     deckEditHint: 'Tempk, kad perkeltum, ✕ ištrink kortą.',
@@ -156,7 +171,7 @@ export const CREATE_STRINGS = {
     prototype: 'PROTOTIPAS',
     modeMock: 'Pavyzdiniai duomenys, nemokamai',
     modeAi: 'Tikras AI, kainuoja',
-    writingWait: 'Didelė kaladė gali užtrukti iki minutės.',
+    writingWait: 'Didelė kaladė užtrunka iki minutės. Puikus metas įsipilti arbatos.',
     writingPrep: 'Tralala sveria idėjas ir renkasi geriausias. Kortos netrukus pradės rodytis.',
     prepLines: [
       'Skaito tavo atsakymus…',
