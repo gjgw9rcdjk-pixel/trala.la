@@ -1,9 +1,8 @@
 // Read-only export of the anonymous, aggregate counters written by
 // /api/track — sessions (total/new/returning/by day/by language), card views
 // (by question, by category, by category-within-language, by filter mode),
-// and shares (by question, by category). Gated by the same shared secret as
-// the feedback export/moderate routes (FEEDBACK_EXPORT_KEY) since both are
-// "owner-only, no admin login" actions.
+// and shares (by question, by category). Owner session only
+// (lib/adminAuth.js); backs the /insights page.
 //
 // Pass ?range=7 / 30 / 90 / max (default: max) to scope everything except the
 // sessions-per-day chart — that one always comes back in full so a caller can
@@ -11,7 +10,7 @@
 
 import { kv } from '@vercel/kv';
 import { NextResponse } from 'next/server';
-import { checkExportKey } from '@/lib/feedbackKv';
+import { adminOnly } from '@/lib/adminAuth';
 
 // Every source hash stores fields as "<date>|<rest>". This splits on the
 // first "|", keeps only fields whose date falls in `dateSet` (null = keep
@@ -46,9 +45,9 @@ function dateSetForRange(rangeParam) {
 }
 
 export async function GET(request) {
+  const denied = await adminOnly();
+  if (denied) return denied;
   const { searchParams } = new URL(request.url);
-  const err = checkExportKey(searchParams);
-  if (err) return NextResponse.json({ error: err.error }, { status: err.status });
 
   const rangeParam = searchParams.get('range') || 'max';
   const dateSet = dateSetForRange(rangeParam);

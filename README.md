@@ -40,29 +40,17 @@ per device per day) and see + upvote/downvote what others wrote. It uses the
 same KV store as ratings, so it works automatically once that's set up —
 nothing extra to configure. Submissions are public to anyone using the app;
 there's no moderation beyond the daily limit, so remove anything inappropriate
-via the `/moderate` page below.
+via the `/moderate` page (see "Admin" below).
 
 ### Feedback export
 
-There's no admin login, so pulling the raw feedback for analysis works via a
-private link instead:
-
-1. Pick a long random string yourself (e.g. `openssl rand -hex 24`).
-2. Vercel dashboard → your project → **Settings** → **Environment Variables**
-   → add `FEEDBACK_EXPORT_KEY` with that value. Redeploy.
-3. Visit `https://<your-site>/api/feedback/export?key=<that value>` to get
-   every submission as JSON. Keep that URL private — it's the only thing
-   protecting the data. Leaving `FEEDBACK_EXPORT_KEY` unset disables the
-   endpoint (it 404s).
+Logged in as admin, open `https://<your-site>/api/feedback/export` in the
+same browser to get every submission as JSON.
 
 ### Moderation
 
-To delete a submission (spam, something inappropriate), visit
-`https://<your-site>/moderate?key=<your FEEDBACK_EXPORT_KEY>` — same key as
-export, no separate setup. It lists every submission with a DELETE button
-next to each. The page isn't linked from anywhere in the app and is marked
-`noindex`, but the URL itself (with the key in it) is the only thing gating
-it, so keep it private like the export link.
+`/moderate` (linked from `/admin`) lists every submission with a DELETE
+button next to each.
 
 ## Analytics
 
@@ -78,11 +66,10 @@ only ever seeing an all-time total.
 
 ### Analytics export
 
-Same private-link pattern as the feedback export, and the same
-`FEEDBACK_EXPORT_KEY` gates it:
+Admin session only, like the feedback export:
 
-1. Visit `https://<your-site>/api/analytics?key=<your FEEDBACK_EXPORT_KEY>`
-   for everything since launch, or add `&range=7` / `&range=30` / `&range=90`
+1. Visit `https://<your-site>/api/analytics` for everything since launch, or
+   add `?range=7` / `?range=30` / `?range=90`
    to scope sessions, views, and shares to that many trailing days (the
    sessions-per-day breakdown always comes back in full either way, so a
    caller can chart the whole history and still get lockstep totals for
@@ -91,12 +78,10 @@ Same private-link pattern as the feedback export, and the same
    by category *within* each language (e.g. "what's popular among English
    players") — and `views.byFilterMode` — how often people browse with the
    category filter left on "All" versus narrowed to one or a few categories.
-3. Leaving `FEEDBACK_EXPORT_KEY` unset disables this endpoint too (404s).
 
 ### Insights dashboard
 
-`https://<your-site>/insights?key=<your FEEDBACK_EXPORT_KEY>` is a private,
-unlisted (not linked from anywhere in the app, `noindex`) page that reads
+`/insights` (linked from `/admin`) is a private page that reads
 `/api/analytics` and `/api/stats` and renders them — sessions over time,
 new vs. returning, languages, categories (overall or filtered to one
 language), and question leaderboards (most seen, most loved, rarely loved).
@@ -104,6 +89,28 @@ The 7D / 30D / 90D / MAX chips re-fetch `/api/analytics` for that window; the
 language chips just re-slice the single response already in hand. Like/down
 percentages are always all-time (that data doesn't live in `/api/analytics`)
 and only count questions with 3+ votes.
+
+## Admin
+
+All owner-only pages sit behind one login (`lib/adminAuth.js`):
+
+1. Set two env vars in Vercel (Settings → Environment Variables, Production)
+   and redeploy:
+   - `ADMIN_KEY`: a long random string (`openssl rand -hex 24`). It goes in
+     the admin link: `https://<your-site>/admin?key=<ADMIN_KEY>`.
+   - `ADMIN_CODE`: the code you type on that page. Make it long enough not
+     to be guessed (a passphrase is fine).
+2. Open the admin link, type the code. Each IP gets 3 wrong tries per 24
+   hours (key or code), then it is locked out until the 24 hours pass.
+3. A signed, httpOnly cookie keeps you logged in for 12 hours in that
+   browser. `/admin` then lists Insights, Moderation, promo codes and the
+   owner mode of `/create`; "Atsijungti" logs out.
+
+Without the session, every private page and API answers a plain 404, and all
+of them send `X-Robots-Tag: noindex` (`next.config.mjs`). They are
+deliberately not listed in `robots.txt`, which is public. Changing
+`ADMIN_KEY` or `ADMIN_CODE` logs every browser out. Leaving either unset
+switches admin off entirely.
 
 ## Deploy to Vercel
 

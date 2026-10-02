@@ -1,18 +1,17 @@
 'use client';
 
 // Promo codes for /create: make one, copy it or its link, watch usage.
-// Talks to app/api/create/codes with the ?key= from the page URL.
+// Talks to app/api/create/codes, which checks the owner session cookie.
 
 import { useEffect, useState } from 'react';
 import '@/app/game/game.css';
 import '../create.css';
 
 async function codesApi(body) {
-  const key = new URLSearchParams(window.location.search).get('key') || '';
   const res = await fetch('/api/create/codes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, key }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Request failed (${res.status}).`);
   return res.json();

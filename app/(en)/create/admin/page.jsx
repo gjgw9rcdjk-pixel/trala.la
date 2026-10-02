@@ -1,8 +1,9 @@
 // Owner-only page for promo codes: make a code (note + number of decks),
 // copy it or a ready link, see how much each code has been used, switch one
-// off. Reached only via /create/admin?key=... (CREATE_PREVIEW_KEY).
+// off. Owner only (lib/adminAuth.js; reached from /admin).
 
 import { notFound } from 'next/navigation';
+import { isAdmin } from '@/lib/adminAuth';
 import AdminCodes from './AdminCodes';
 
 export const metadata = {
@@ -10,9 +11,7 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function AdminPage({ searchParams }) {
-  const { key } = await searchParams;
-  const expected = process.env.CREATE_PREVIEW_KEY;
-  if (!expected || key !== expected) notFound();
+export default async function AdminPage() {
+  if (!(await isAdmin())) notFound();
   return <AdminCodes />;
 }
