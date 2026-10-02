@@ -2,7 +2,7 @@
 
 // AI deck generator. Four screens (Idea → Refine → Deck → Play).
 // Players unlock it with a promo code (app/api/create/codes.js); one deck
-// uses one generation from the code. The owner (admin, ?key=...) skips the
+// uses one generation from the code. The owner (admin, logged in) skips the
 // code and gets the prototype bar: "Mock" uses ./mockData.js and a timer
 // (free), "AI" calls app/api/create/* (Claude, costs money).
 // Reuses the game's look (app/game/game.css, scoped to .tl-shell) plus a few
@@ -73,17 +73,16 @@ async function keepAwake() {
   }
 }
 
-// POST to one of the /api/create routes, with the owner's key or the
-// saved promo code; throws with a readable message.
+// POST to one of the /api/create routes with the saved promo code (the
+// owner's session cookie goes along by itself); throws with a readable message.
 async function post(path, body, signal) {
-  const key = new URLSearchParams(window.location.search).get('key') || '';
   const code = readJson(CODE_KEY, '');
   let res;
   try {
     res = await fetch(`/api/create/${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, key, code }),
+      body: JSON.stringify({ ...body, code }),
       signal,
     });
   } catch (e) {

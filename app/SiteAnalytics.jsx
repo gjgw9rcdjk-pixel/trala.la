@@ -1,8 +1,8 @@
 'use client';
 
 // Vercel Analytics with private keys stripped from the recorded URL.
-// /create, /insights and /moderate are opened with ?key=..., and shared
-// /create links carry a promo ?code=...; neither should end up in the
+// /admin is opened with ?key=..., and shared /create links carry a promo
+// ?code=...; neither should end up in the
 // analytics dashboard. beforeSend is a
 // function, so this has to be a client component (RootShell is a server one).
 

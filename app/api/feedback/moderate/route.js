@@ -1,15 +1,13 @@
-// Private view + delete for the feedback board, gated by the same shared
-// secret as /api/feedback/export (FEEDBACK_EXPORT_KEY) — there's no admin
-// login, so this key is the only thing standing between anyone and the
-// ability to remove a submission. Backs the /moderate page.
+// Private view + delete for the feedback board. Owner session only
+// (lib/adminAuth.js). Backs the /moderate page.
 
 import { NextResponse } from 'next/server';
-import { listFeedback, deleteFeedback, checkExportKey } from '@/lib/feedbackKv';
+import { listFeedback, deleteFeedback } from '@/lib/feedbackKv';
+import { adminOnly } from '@/lib/adminAuth';
 
-export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const keyError = checkExportKey(searchParams);
-  if (keyError) return NextResponse.json({ error: keyError.error }, { status: keyError.status });
+export async function GET() {
+  const denied = await adminOnly();
+  if (denied) return denied;
 
   try {
     const items = await listFeedback();
@@ -20,9 +18,9 @@ export async function GET(request) {
 }
 
 export async function DELETE(request) {
+  const denied = await adminOnly();
+  if (denied) return denied;
   const { searchParams } = new URL(request.url);
-  const keyError = checkExportKey(searchParams);
-  if (keyError) return NextResponse.json({ error: keyError.error }, { status: keyError.status });
 
   const id = Number(searchParams.get('id'));
   if (!Number.isInteger(id) || id <= 0) {

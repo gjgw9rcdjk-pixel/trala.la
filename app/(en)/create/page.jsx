@@ -1,8 +1,9 @@
 // AI deck generator. Opened from the "Make your own cards" tile in the game.
-// Players unlock it with a promo code (made on /create/admin). The owner's
-// link, /create?key=... with CREATE_PREVIEW_KEY, also shows the prototype
-// switches (mock data, model choice, cost per call) and needs no code.
+// Players unlock it with a promo code (made on /create/admin). The logged-in
+// owner (lib/adminAuth.js) also gets the prototype switches (mock data, model
+// choice, cost per call) and needs no code.
 
+import { isAdmin } from '@/lib/adminAuth';
 import CreateFlow from './CreateFlow';
 
 export const metadata = {
@@ -11,8 +12,7 @@ export const metadata = {
 };
 
 export default async function CreatePage({ searchParams }) {
-  const { key, ui } = await searchParams;
-  const expected = process.env.CREATE_PREVIEW_KEY;
-  const admin = Boolean(expected) && key === expected;
+  const { ui } = await searchParams;
+  const admin = await isAdmin();
   return <CreateFlow admin={admin} initialUi={ui === 'lt' ? 'lt' : 'en'} />;
 }

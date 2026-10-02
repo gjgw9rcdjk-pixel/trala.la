@@ -1,12 +1,14 @@
 // Owner-only code management for /create/admin: list, create, switch off.
-// Needs CREATE_PREVIEW_KEY; anything else gets a plain 404.
+// Owner session only (lib/adminAuth.js); anything else gets a plain 404.
 
-import { badKey, errorResponse } from '../ai';
+import { adminOnly } from '@/lib/adminAuth';
+import { errorResponse } from '../ai';
 import { createCode, disableCode, listCodes, listProblems } from '../codes';
 
 export async function POST(request) {
+  const denied = await adminOnly();
+  if (denied) return denied;
   const body = await request.json().catch(() => ({}));
-  if (badKey(body.key)) return Response.json({ error: 'not_found' }, { status: 404 });
   try {
     const created = body.action === 'create' ? await createCode({ note: body.note, limit: body.limit }) : null;
     if (body.action === 'disable') await disableCode(body.code);

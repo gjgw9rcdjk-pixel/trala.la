@@ -4,6 +4,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { kv } from '@vercel/kv';
+import { isAdmin } from '@/lib/adminAuth';
 import { CodeError, clientIp, logProblem } from './codes';
 
 const client = new Anthropic();
@@ -14,13 +15,6 @@ export const MODELS = {
 };
 
 const DAILY_LIMIT = Number(process.env.CREATE_DAILY_LIMIT) || 40;
-
-// The owner's key (CREATE_PREVIEW_KEY): prototype switches, admin page.
-// Everyone else comes in with a promo code (./codes.js).
-export function badKey(key) {
-  const expected = process.env.CREATE_PREVIEW_KEY;
-  return !expected || key !== expected;
-}
 
 // Daily cap on AI calls. KV in production; an in-memory counter locally
 // (no KV env vars), which resets when the dev server restarts.
@@ -126,7 +120,9 @@ export async function gate(request, check) {
   } catch {
     return { response: Response.json({ error: 'bad_json' }, { status: 400 }) };
   }
-  const admin = !badKey(body.key);
+  // The logged-in owner (lib/adminAuth.js) gets the prototype switches;
+  // everyone else comes in with a promo code (./codes.js).
+  const admin = await isAdmin();
   if (!admin && !body.code) return { response: Response.json({ error: 'not_found' }, { status: 404 }) };
   if (!admin) body.model = 'sonnet';
   let access = { admin, code: body.code, ip: clientIp(request) };
