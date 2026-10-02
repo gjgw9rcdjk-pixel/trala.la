@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CATEGORIES, QUESTIONS, QUESTION_BY_ID } from '@/lib/content';
-import { DECK_STYLE, UI_LANGUAGES, VISIBLE_DECKS, SPICE_LEVELS, SPICE_EXAMPLE, TIMER_SECONDS, countFor, deckOffset } from '@/lib/gameMeta';
+import { DECK_STYLE, DECK_AUDIENCE, UI_LANGUAGES, VISIBLE_DECKS, SPICE_LEVELS, SPICE_EXAMPLE, TIMER_SECONDS, countFor, deckOffset } from '@/lib/gameMeta';
 import { cards, fmt } from '@/lib/gameStrings';
 
 const catName = (c, lang) => c.names[lang];
@@ -254,6 +254,7 @@ function DeckTile({ s, lang, cat, on, count, onToggle, tileRef }) {
   const fullCount = countFor(cat.id, 'nomercy');
   const style = DECK_STYLE[cat.id];
   const raised = !style.color;
+  const audience = DECK_AUDIENCE[cat.id]?.[lang] || DECK_AUDIENCE[cat.id]?.en;
   return (
     <button
       ref={tileRef}
@@ -265,6 +266,7 @@ function DeckTile({ s, lang, cat, on, count, onToggle, tileRef }) {
       {cat.note ? <span className="tl-tag">{s.adultTag}</span> : <span className="tl-tile__glyph" aria-hidden="true">{style.glyph}</span>}
       <span>
         <span className="tl-tile__name">{catName(cat, lang)}</span>
+        {audience && <span className="tl-tile__for">{audience}</span>}
         <span className="tl-tile__count">{count < fullCount ? fmt(s.cardsOf, { n: count, total: fullCount }) : cards(s, count)}</span>
       </span>
       {on && <span className="tl-tile__check" aria-hidden="true">✓</span>}
