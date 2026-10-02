@@ -31,8 +31,33 @@ const fonts = [
 async function renderPng(node, width, height, outPath) {
   const res = new ImageResponse(node, { width, height, fonts });
   const buf = Buffer.from(await res.arrayBuffer());
-  await writeFile(outPath, buf);
-  console.log('wrote', outPath, `${width}x${height}`);
+  if (outPath) {
+    await writeFile(outPath, buf);
+    console.log('wrote', outPath, `${width}x${height}`);
+  }
+  return buf;
+}
+
+// favicon.ico for crawlers and browsers that ask for /favicon.ico directly
+// (Google search results among them). ICO files can hold PNGs as-is.
+async function writeIco(pngs, outPath) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(pngs.length, 4);
+  let offset = 6 + 16 * pngs.length;
+  const entries = pngs.map(({ size, buf }) => {
+    const e = Buffer.alloc(16);
+    e.writeUInt8(size >= 256 ? 0 : size, 0);
+    e.writeUInt8(size >= 256 ? 0 : size, 1);
+    e.writeUInt16LE(1, 4);
+    e.writeUInt16LE(32, 6);
+    e.writeUInt32LE(buf.length, 8);
+    e.writeUInt32LE(offset, 12);
+    offset += buf.length;
+    return e;
+  });
+  await writeFile(outPath, Buffer.concat([header, ...entries, ...pngs.map((p) => p.buf)]));
+  console.log('wrote', outPath, pngs.map((p) => p.size).join('+'));
 }
 
 const el = (type, style, children) => ({ type, props: { style: { display: 'flex', ...style }, children } });
@@ -70,13 +95,18 @@ function flamingoSrc(w) {
 // Card stack icon. Detail drops with size (design 14d·14): three cards at
 // large sizes, two around 180, one at favicon size. Geometry is taken from
 // the 256px mock and scaled.
+// `zoom` enlarges the whole stack so the flamingo reads bigger on home
+// screens and browser tabs; `cx`/`cy` is the stack's visual centre in the
+// 256px mock (back cards + pink offset included), moved to the icon centre.
 function stackIcon(size, cards) {
-  const k = size / 256;
+  const [zoom, cx, cy] = cards === 1 ? [1.45, 138, 134] : [1.35, 127, 128];
+  const k = (size / 256) * zoom;
+  const at = (v, c) => (128 + (v - c) * zoom) * (size / 256);
   const cw = 124 * k;
   const ch = 150 * k;
   const r = 24 * k;
   const card = (left, top, bg, rot, extra = {}, children) =>
-    el('div', { position: 'absolute', left: left * k, top: top * k, width: cw, height: ch, borderRadius: r, background: bg, ...(rot ? { transform: `rotate(${rot}deg)` } : {}), ...extra }, children);
+    el('div', { position: 'absolute', left: at(left, cx), top: at(top, cy), width: cw, height: ch, borderRadius: r, background: bg, ...(rot ? { transform: `rotate(${rot}deg)` } : {}), ...extra }, children);
   const layers = [];
   if (cards >= 3) layers.push(card(64, 48, BLUE, -14));
   if (cards >= 2) layers.push(card(66, 50, YELLOW, -6));
@@ -90,14 +120,14 @@ function stackIcon(size, cards) {
       justifyContent: 'center',
     }, { type: 'img', props: { src: flamingoSrc(tubeW), width: cw * 0.86, height: ch * 0.86 } })
   );
-  return el('div', { width: '100%', height: '100%', position: 'relative', ...(size >= 128 ? dots(2 * k, 22 * k) : { background: GROUND }) }, layers);
+  return el('div', { width: '100%', height: '100%', position: 'relative', ...(size >= 128 ? dots(2 * size / 256, 22 * size / 256) : { background: GROUND }) }, layers);
 }
 
 // Maskable (Android adaptive) icon: the neon flamingo on the dark ground,
 // kept well inside the 80% safe zone so any mask shape leaves it whole.
 function maskableIcon(size) {
   return el('div', { width: '100%', height: '100%', background: INK, alignItems: 'center', justifyContent: 'center' },
-    { type: 'img', props: { src: flamingoSrc(5), width: size * 0.5, height: size * 0.5 * (128 / 88) * 0.8 } });
+    { type: 'img', props: { src: flamingoSrc(5), width: size * 0.56, height: size * 0.56 * (128 / 88) * 0.8 } });
 }
 
 // Open Graph 1200×630 (design 13d): a real question card on the dot ground,
@@ -121,7 +151,9 @@ function ogImage() {
 await renderPng(stackIcon(512, 3), 512, 512, join(root, 'public/icon-512.png'));
 await renderPng(stackIcon(192, 2), 192, 192, join(root, 'public/icon-192.png'));
 await renderPng(maskableIcon(512), 512, 512, join(root, 'public/icon-maskable-512.png'));
-await renderPng(stackIcon(96, 1), 96, 96, join(root, 'app/icon.png'));
+const icon96 = await renderPng(stackIcon(96, 1), 96, 96, join(root, 'app/icon.png'));
+const icon48 = await renderPng(stackIcon(48, 1), 48, 48);
+await writeIco([{ size: 48, buf: icon48 }, { size: 96, buf: icon96 }], join(root, 'app/favicon.ico'));
 await renderPng(stackIcon(180, 2), 180, 180, join(root, 'app/apple-icon.png'));
 await renderPng(ogImage(), 1200, 630, join(root, 'app/opengraph-image.png'));
 
