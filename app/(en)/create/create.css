@@ -220,6 +220,7 @@
 .tc-app .tc-nav { display: flex; align-items: center; justify-content: space-between; margin: 0 0 18px; }
 .tc-app .tc-nav .tl-icon-btn { height: 52px; width: 64px; font-size: 20px; }
 .tc-app .tc-nav__count { font: 800 13px var(--body); letter-spacing: .08em; color: var(--t2); }
+.tc-app .tc-nav__mid { display: flex; align-items: center; gap: 12px; }
 
 /* ── prototype mode bar (Mock / AI, model) ─────────── */
 .tc-app .tc-mode { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 24px 0; flex-wrap: wrap; }
