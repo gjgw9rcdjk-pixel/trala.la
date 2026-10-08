@@ -137,6 +137,22 @@ button.tl-wordmark { padding: 6px 0; line-height: 1; }
   font: 600 15px var(--body); color: var(--card);
 }
 
+/* TV mode (app/game/tv.jsx): the TV button lights up while a TV is joined. */
+/* Deck line: what's in play on the left, the TV button on the right. */
+.tl-deck-row { flex: none; display: flex; align-items: flex-end; justify-content: space-between; padding-right: 24px; }
+.tl-deck-row .tl-tv-btn { margin-top: 10px; }
+.tl-tv-btn svg { width: 22px; height: 22px; }
+.tl-tv-btn[data-on="true"] { background: rgba(255, 78, 125, .18); color: var(--neon-core); box-shadow: 0 0 0 1px var(--pink), 0 0 12px rgba(255, 78, 125, .45); }
+.tl-tv-code {
+  width: 100%; margin-top: 16px; height: 72px; border-radius: 16px; text-align: center;
+  background: rgba(255, 255, 255, .07); border: 1px solid var(--raised-border); color: var(--card);
+  font: 800 40px var(--display); letter-spacing: .3em; text-transform: uppercase;
+}
+.tl-tv-code::placeholder { color: rgba(255, 255, 255, .2); }
+.tl-tv-code:focus { outline: 2px solid var(--pink); outline-offset: 2px; }
+.tl-tv-error { margin: 10px 0 0; font: 600 13px/1.4 var(--body); color: var(--neon-hot); }
+
+
 .tl-pill {
   padding: 8px 13px; border-radius: 999px;
   background: rgba(255, 255, 255, .1);
@@ -216,7 +232,8 @@ button.tl-wordmark { padding: 6px 0; line-height: 1; }
   transform: rotate(-1.4deg);
   /* Pink offset with a faint neon halo — kept low so the question stays the focus. */
   box-shadow: 14px 16px 0 0 var(--offset), 14px 16px 18px 0 var(--glow), 0 30px 50px -24px rgba(0, 0, 0, .8);
-  touch-action: pan-y;
+  /* The card takes swipes in every direction, so the page must not pan. */
+  touch-action: none;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
@@ -241,10 +258,10 @@ button.tl-wordmark { padding: 6px 0; line-height: 1; }
   background: var(--sand); color: var(--ink);
 }
 .tl-badge--alert { background: var(--action); color: var(--white); }
-.tl-card__skipped {
+.tl-card__stamp {
   position: absolute; top: 22px; right: 22px;
   padding: 6px 10px; border-radius: 8px; border: 2px solid var(--action);
-  color: var(--action); font: 800 11px var(--body); letter-spacing: .14em;
+  color: var(--action); background: var(--card); font: 800 11px var(--body); letter-spacing: .14em;
   transform: rotate(8deg); pointer-events: none;
 }
 .tl-card-ghost {

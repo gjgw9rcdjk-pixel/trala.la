@@ -24,10 +24,13 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
-  const row = QUESTION_BY_ID.get(id);
-  const text = row[2][lang];
-  const link = cardLink(id, lang);
+// Shares a deck card (by `id`), or any other card given as `text` — e.g. a
+// /create deck that lives only on this phone. Those have no card link, so
+// they point at the site instead and skip the Link format.
+export function ShareSheet({ s, lang, id, text: ownText, fromSaved, onClose }) {
+  const text = id ? QUESTION_BY_ID.get(id)[2][lang] : ownText;
+  const link = id ? cardLink(id, lang) : `https://tralala.cards${PATH_BY_LANG[lang] === '/' ? '' : PATH_BY_LANG[lang] || ''}`;
+  const fileName = `tralala-${id || 'card'}.png`;
   const [format, setFormat] = useState(fromSaved ? 'story' : 'square'); // square | story | link
   const [surface, setSurface] = useState('cream');
   const [preview, setPreview] = useState(null);
@@ -36,7 +39,7 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
   const imageFormat = format === 'link' ? 'square' : format;
   const make = (f) => renderCard({ text, format: f, surface });
 
-  useEffect(() => { track('share_open', { question: id, lang }); }, [id, lang]);
+  useEffect(() => { if (id) track('share_open', { question: id, lang }); }, [id, lang]);
 
   useEffect(() => {
     let url;
@@ -51,7 +54,7 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
       if (url) URL.revokeObjectURL(url);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageFormat, surface, lang, id]);
+  }, [imageFormat, surface, lang, text]);
 
   const flash = (msg) => {
     setStatus(msg);
@@ -60,7 +63,7 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
 
   const shareImage = async (f) => {
     const blob = await make(f);
-    const file = new File([blob], `tralala-${id}.png`, { type: 'image/png' });
+    const file = new File([blob], fileName, { type: 'image/png' });
     try {
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], text: link });
@@ -97,7 +100,7 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
   };
 
   const saveImage = async () => {
-    download(await make(imageFormat), `tralala-${id}.png`);
+    download(await make(imageFormat), fileName);
     flash(s.imageSaved);
   };
 
@@ -105,8 +108,8 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
     ['↗', s.story, () => shareImage('story')],
     ['▣', s.post, () => shareImage('square')],
     ['✉', s.sendT, sendText],
-    ['⧉', s.linkT, copyLink],
-  ];
+    id && ['⧉', s.linkT, copyLink],
+  ].filter(Boolean);
 
   return (
     <Sheet onClose={onClose} label={s.shareTitle}>
@@ -124,7 +127,7 @@ export function ShareSheet({ s, lang, id, fromSaved, onClose }) {
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="tl-segmented" style={{ marginTop: 0, height: 44 }} role="group">
-            {[['square', '1:1'], ['story', '9:16'], ['link', s.fmtLink]].map(([f, t]) => (
+            {[['square', '1:1'], ['story', '9:16'], id && ['link', s.fmtLink]].filter(Boolean).map(([f, t]) => (
               <button key={f} aria-pressed={format === f} onClick={() => setFormat(f)}>{t}</button>
             ))}
           </div>

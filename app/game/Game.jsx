@@ -9,11 +9,12 @@ import { track, rateQuestion } from '@/lib/analytics';
 import { PATH_BY_LANG } from '@/lib/seo';
 import {
   BottomNav, DecksScreen, EndScreen, HomeScreen, LangPill, LanguageSheet,
-  CardTimer, QuestionCard, Wordmark,
+  CardTimer, QuestionCard, Wordmark, dragTransform,
 } from './parts';
 import { SavedScreen } from './lists';
 import { SayScreen } from './say';
 import { ShareSheet } from './share';
+import { TvButton, TvSheet, useTvRemote } from './tv';
 import { InstallSheet, Onboarding, Splash, useInstallPrompt } from './onboarding';
 import './game.css';
 
@@ -29,6 +30,14 @@ const INSTALL_KEY = 'tralala.installDismissed';
 const SPLASH_MS = 2200;
 const UNDO_MS = 4000;
 const SWIPE_COMMIT = 90;
+const NO_DRAG = { x: 0, y: 0 };
+// Where the card flies for each swipe direction.
+const EXIT = {
+  left: 'translateX(-130%) rotate(-9deg)',
+  right: 'translateX(130%) rotate(9deg)',
+  up: 'translateY(-140%) rotate(-1.4deg)',
+  down: 'translateY(140%) rotate(-1.4deg)',
+};
 
 // Random order with categories mixed, so the same kind of card doesn't come
 // up back to back.
@@ -45,6 +54,12 @@ function readJson(key, fallback) {
 
 function writeJson(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+// Remembers the language for a year; middleware.js sends a later visit to /
+// to that language's page.
+function rememberLang(l) {
+  document.cookie = `tl_lang=${l}; path=/; max-age=31536000; samesite=lax`;
 }
 
 export default function Game({ initialLang = 'en' }) {
@@ -69,7 +84,8 @@ export default function Game({ initialLang = 'en' }) {
   const [saved, setSaved] = useState([]);
   const [savedAt, setSavedAt] = useState({}); // id → timestamp
   const [toast, setToast] = useState(null); // { id }
-  const [dragX, setDragX] = useState(0);
+  // Finger offset while swiping; only one axis moves at a time.
+  const [dragged, setDragged] = useState(NO_DRAG);
 
   const cardRef = useRef(null);
   const busy = useRef(false);
@@ -80,10 +96,16 @@ export default function Game({ initialLang = 'en' }) {
   const row = QUESTION_BY_ID.get(currentId);
   const filtered = selected.length > 0;
 
+  // TV mode: a joined TV mirrors the card on screen (nothing off the deck screen).
+  const tv = useTvRemote(screen === 'deck' && row
+    ? { kind: 'deck', id: currentId, lang, i: pos + 1, n: order.length, timer: timerOn ? 1 : 0 }
+    : { kind: 'idle' });
+
   // ── restore per-device state ──────────────────────────────────────────
   useEffect(() => {
     // The URL decides the language (/ = English, /lt = Lithuanian, …).
     document.documentElement.lang = initialLang;
+    rememberLang(initialLang);
     setSaved(readJson(SAVED_KEY, []).filter((id) => QUESTION_BY_ID.has(id)));
     setSavedAt(readJson(SAVED_AT_KEY, {}));
     const st = readJson(SETTINGS_KEY, {});
@@ -157,6 +179,7 @@ export default function Game({ initialLang = 'en' }) {
   const chooseLang = (l) => {
     setLang(l);
     document.documentElement.lang = l;
+    rememberLang(l);
     // Move to that language's URL without reloading, so a shared or
     // bookmarked link opens in the same language.
     window.history.replaceState(window.history.state, '', PATH_BY_LANG[l]);
@@ -170,7 +193,9 @@ export default function Game({ initialLang = 'en' }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, currentId]);
 
-  // Animates the card off-screen, then moves to `nextPos` (or the end screen).
+  // Animates the card off-screen towards `dir` (left | right | up | down),
+  // then moves to `nextPos` (or the end screen). A card going right is a step
+  // back, so the earlier card slides in from the left; others rise from below.
   const leave = (dir, nextPos, after) => {
     const finish = () => {
       after?.();
@@ -182,23 +207,25 @@ export default function Game({ initialLang = 'en' }) {
       setPos(nextPos);
     };
     const el = cardRef.current;
-    if (!el || !el.animate || busy.current) { setDragX(0); finish(); return; }
+    if (!el || !el.animate || busy.current) { setDragged(NO_DRAG); finish(); return; }
     busy.current = true;
-    const from = dragX ? `translateX(${dragX}px) rotate(${-1.4 + dragX / 30}deg)` : 'rotate(-1.4deg)';
     const out = el.animate(
       [
-        { transform: from, opacity: 1 },
-        { transform: `translateX(${dir < 0 ? -130 : 130}%) rotate(${dir < 0 ? -9 : 9}deg)`, opacity: 0 },
+        { transform: dragTransform(dragged), opacity: 1 },
+        { transform: EXIT[dir], opacity: 0 },
       ],
       { duration: 320, easing: 'cubic-bezier(.4,.05,.3,1)', fill: 'forwards' }
     );
     out.onfinish = () => {
-      setDragX(0);
+      setDragged(NO_DRAG);
       finish();
       requestAnimationFrame(() => {
         out.cancel();
+        const enter = dir === 'right'
+          ? 'translateX(-40%) rotate(-6deg) scale(.98)'
+          : 'translateY(18px) rotate(-1.4deg) scale(.98)';
         cardRef.current?.animate(
-          [{ transform: 'translateY(18px) rotate(-1.4deg) scale(.98)', opacity: 0.4 }, { transform: 'rotate(-1.4deg)', opacity: 1 }],
+          [{ transform: enter, opacity: 0.4 }, { transform: 'rotate(-1.4deg)', opacity: 1 }],
           { duration: 220, easing: 'ease-out' }
         );
         busy.current = false;
@@ -209,7 +236,23 @@ export default function Game({ initialLang = 'en' }) {
   const next = () => {
     if (busy.current) return;
     setLastSkip(null);
-    leave(1, pos + 1, () => setRound((r) => ({ ...r, played: r.played + 1 })));
+    leave('left', pos + 1, () => setRound((r) => ({ ...r, played: r.played + 1 })));
+  };
+
+  // Swipe right: back to the card before. On the first card it just settles.
+  const prev = () => {
+    if (busy.current) return;
+    if (pos === 0) { setDragged(NO_DRAG); return; }
+    setLastSkip(null);
+    leave('right', pos - 1);
+  };
+
+  // Swipe up: star the card (if it isn't yet) and move on.
+  const saveAndNext = () => {
+    if (busy.current) return;
+    if (!saved.includes(currentId)) toggleStar();
+    setLastSkip(null);
+    leave('up', pos + 1, () => setRound((r) => ({ ...r, played: r.played + 1 })));
   };
 
   // Tapping the card turns it over like a real card; the next question is on
@@ -250,7 +293,7 @@ export default function Game({ initialLang = 'en' }) {
       track('rate', { question: id, kind: 'down' });
       rateQuestion(id, 'down');
     }
-    leave(-1, pos + 1, () => {
+    leave('down', pos + 1, () => {
       setRound((r) => ({ ...r, skipped: r.skipped + 1 }));
       setLastSkip({ pos, id, at: Date.now(), voted: !wasSaved });
     });
@@ -311,35 +354,42 @@ export default function Game({ initialLang = 'en' }) {
     const d = drag.current;
     if (!d || d.id !== e.pointerId) return;
     const dx = e.clientX - d.x;
-    if (!d.moved && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(e.clientY - d.y)) {
+    const dy = e.clientY - d.y;
+    // The first clear move picks the axis; the card then follows only that.
+    if (!d.axis && Math.max(Math.abs(dx), Math.abs(dy)) > 8) {
+      d.axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
       d.moved = true;
       e.currentTarget.setPointerCapture?.(e.pointerId);
     }
-    if (d.moved) setDragX(dx);
+    if (d.axis) setDragged(d.axis === 'x' ? { x: dx, y: 0 } : { x: 0, y: dy });
   };
+  // Left = next, right = back, up = save and next, down = skip.
   const onPointerUp = (e) => {
     const d = drag.current;
     drag.current = null;
     if (!d) return;
     if (!d.moved) {
-      // A tap (not a scroll or a cancelled touch) turns the card over.
+      // A tap (not a cancelled touch) turns the card over.
       const still = Math.abs(e.clientX - d.x) < 8 && Math.abs(e.clientY - d.y) < 8;
       if (e.type === 'pointerup' && still) flip();
       return;
     }
-    if (dragX <= -SWIPE_COMMIT) skip();
-    else if (dragX >= SWIPE_COMMIT) next();
-    else setDragX(0);
+    const { x, y } = dragged;
+    if (x <= -SWIPE_COMMIT) next();
+    else if (x >= SWIPE_COMMIT) prev();
+    else if (y <= -SWIPE_COMMIT) saveAndNext();
+    else if (y >= SWIPE_COMMIT) skip();
+    else setDragged(NO_DRAG);
   };
 
-  // Desktop keyboard: → next, ← undo the last skip.
+  // Desktop keyboard: → next, ← back, ↑ save and next, ↓ skip.
   useEffect(() => {
     if (screen !== 'deck' || sheet) return undefined;
     const onKey = (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target.closest?.('input, textarea')) return;
-      if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
-      else if (e.key === 'ArrowLeft' && lastSkip) { e.preventDefault(); undoSkip(); }
+      const act = { ArrowRight: next, ArrowLeft: prev, ArrowUp: saveAndNext, ArrowDown: skip }[e.key];
+      if (act) { e.preventDefault(); act(); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -430,17 +480,20 @@ export default function Game({ initialLang = 'en' }) {
             </div>
             <div className="tl-progress"><div style={{ width: `${((pos + 1) / order.length) * 100}%` }} /></div>
             {/* What's in play; tapping it opens the deck picker to change it. */}
-            <button
-              className="tl-deck-meta"
-              onClick={openDecks}
-              style={{ color: selected.length === 1 ? DECK_STYLE[selected[0]].color || 'var(--pink)' : 'var(--t2)' }}
-            >
-              {!filtered
-                ? s.fullDeck
-                : selected.length === 1
-                  ? CATEGORIES.find((c) => c.id === selected[0]).names[lang].toUpperCase()
-                  : fmt(s.catsPicked, { k: selected.length })}
-            </button>
+            <div className="tl-deck-row">
+              <button
+                className="tl-deck-meta"
+                onClick={openDecks}
+                style={{ color: selected.length === 1 ? DECK_STYLE[selected[0]].color || 'var(--pink)' : 'var(--t2)' }}
+              >
+                {!filtered
+                  ? s.fullDeck
+                  : selected.length === 1
+                    ? CATEGORIES.find((c) => c.id === selected[0]).names[lang].toUpperCase()
+                    : fmt(s.catsPicked, { k: selected.length })}
+              </button>
+              <TvButton tv={tv} label={s.ariaTv} onClick={() => setSheet('tv')} />
+            </div>
             {loop > 0 && pos < 2 && <div className="tl-deck-meta" style={{ paddingTop: 4 }}>● {s.startingOver}</div>}
             <div className="tl-card-area">
               <QuestionCard
@@ -449,7 +502,7 @@ export default function Game({ initialLang = 'en' }) {
                 row={row}
                 filtered={filtered}
                 cardRef={cardRef}
-                dragX={dragX}
+                dragged={dragged}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
@@ -458,7 +511,6 @@ export default function Game({ initialLang = 'en' }) {
             </div>
             {timerOn && <CardTimer s={s} resetKey={currentId} />}
             <div className="tl-band">
-              <button className="tl-icon-btn" style={{ fontSize: 18 }} onClick={undoSkip} disabled={!lastSkip} aria-label={s.ariaUndo}>↺</button>
               <button className="tl-icon-btn" onClick={skip} aria-label={s.ariaSkip}>✕</button>
               {undoActive ? (
                 <button className="tl-btn tl-btn--primary" style={{ background: 'var(--card)', color: 'var(--ink)' }} onClick={undoSkip}>
@@ -544,6 +596,7 @@ export default function Game({ initialLang = 'en' }) {
         {sheet === 'install' && (
           <InstallSheet s={s} ios={installer.ios} evt={installer.evt} onClose={closeInstall} onPromptUsed={installer.clear} />
         )}
+        {sheet === 'tv' && <TvSheet s={s} tv={tv} onClose={() => setSheet(null)} />}
         {sheet === 'share' && shareOf && (
           <ShareSheet
             s={s}

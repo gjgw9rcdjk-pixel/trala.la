@@ -10,6 +10,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { NeonFlamingo, QText, qSizeClass } from '@/app/game/parts';
+import { ShareSheet } from '@/app/game/share';
+import { TvButton, TvSheet, useTvRemote } from '@/app/game/tv';
+import { GAME_STRINGS } from '@/lib/gameStrings';
 import { CREATE_STRINGS, DECK_LANGS, STEPS } from './strings';
 import { DECK_SIZE, MOCK_SETS, setForIdea } from './mockData';
 import '@/app/game/game.css';
@@ -125,6 +128,8 @@ async function readLines(res, onMessage) {
 export default function CreateFlow({ admin, initialUi = 'en' }) {
   const [ui, setUi] = useState(initialUi);
   const s = CREATE_STRINGS[ui];
+  // Card text being shared from the Play step (the game's share sheet).
+  const [shareText, setShareText] = useState(null);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -506,6 +511,12 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
   // An 18+ deck opens with a card that explains the *flamingo* word.
   const playDeck = playing?.adult ? { ...playing, cards: [s.flamingoIntro, ...playing.cards] } : playing;
 
+  // TV mode: this deck lives only on the phone, so the TV gets the text itself.
+  const [tvOpen, setTvOpen] = useState(false);
+  const tv = useTvRemote(step === 3 && playDeck
+    ? { kind: 'text', text: playDeck.cards[cardIdx], lang: ui, label: playDeck.name, i: cardIdx + 1, n: playDeck.cards.length }
+    : { kind: 'idle' });
+
   // Leaving while Tralala writes stops the deck, and it still counts.
   const aiWriting = ai && Boolean(writing);
   const goBack = () => {
@@ -619,7 +630,8 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
               ].filter(Boolean)} />
           ) : step === 3 && playing ? (
             <PlayStep s={s} deck={playDeck} idx={cardIdx} onGo={(d) => setCardIdx((i) => (i + d + playDeck.cards.length) % playDeck.cards.length)}
-              saved={saved} onOpen={(d) => { setPlaying(d); setCardIdx(0); }} />
+              saved={saved} onOpen={(d) => { setPlaying(d); setCardIdx(0); }} onShare={setShareText} shareLabel={GAME_STRINGS[ui].ariaShare}
+              tvButton={<TvButton tv={tv} label={GAME_STRINGS[ui].ariaTv} onClick={() => setTvOpen(true)} />} />
           ) : null}
         </div>
 
@@ -646,6 +658,10 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
               </>
             )}
           </footer>
+        )}
+        {tvOpen && <TvSheet s={GAME_STRINGS[ui]} tv={tv} onClose={() => setTvOpen(false)} />}
+        {shareText && (
+          <ShareSheet s={GAME_STRINGS[ui]} lang={ui} text={shareText} onClose={() => setShareText(null)} />
         )}
       </div>
     </div>
@@ -1039,7 +1055,7 @@ function PrepLine({ lines }) {
 const SWIPE_COMMIT = 90;
 const tilt = (x) => `translateX(${x}px) rotate(${-1.4 + x / 30}deg)`;
 
-function PlayStep({ s, deck, idx, onGo, saved, onOpen }) {
+function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvButton }) {
   const text = deck.cards[idx];
   const cardRef = useRef(null);
   const busy = useRef(false);
@@ -1158,13 +1174,24 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen }) {
           style={dragX ? { transform: tilt(dragX), transition: 'none' } : undefined}
         >
           <div className="tl-card__label">{deck.name}</div>
+          <button
+            className="tl-share-mark"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onShare(text)}
+            aria-label={shareLabel}
+          >
+            ↗
+          </button>
           <p className={qSizeClass(text)} lang={deck.lang}><QText text={text} /></p>
         </div>
       </div>
 
       <div className="tc-nav">
         <button className="tl-icon-btn" onClick={prev} aria-label={s.prevCard}>←</button>
-        <span className="tc-nav__count">{idx + 1} / {deck.cards.length}</span>
+        <span className="tc-nav__mid">
+          <span className="tc-nav__count">{idx + 1} / {deck.cards.length}</span>
+          {tvButton}
+        </span>
         <button className="tl-icon-btn" onClick={next} aria-label={s.nextCard}>→</button>
       </div>
 

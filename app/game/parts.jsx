@@ -177,10 +177,24 @@ export function CardTimer({ s, resetKey }) {
   );
 }
 
-export function QuestionCard({ s, lang, row, filtered, cardRef, dragX, onPointerDown, onPointerMove, onPointerUp, onShare }) {
+// The card's transform while a finger drags it: sideways it tilts, up and
+// down it only slides.
+export function dragTransform({ x, y }) {
+  if (x) return `translateX(${x}px) rotate(${-1.4 + x / 30}deg)`;
+  if (y) return `translateY(${y}px) rotate(-1.4deg)`;
+  return 'rotate(-1.4deg)';
+}
+
+export function QuestionCard({ s, lang, row, filtered, cardRef, dragged, onPointerDown, onPointerMove, onPointerUp, onShare }) {
   const cat = CATEGORIES.find((c) => c.id === row[0]);
   const text = row[2][lang];
-  const showSkipped = dragX < -60;
+  const { x, y } = dragged;
+  // Stamp telling what letting go will do.
+  const stamp = x < -60 ? s.next
+    : x > 60 ? s.prev
+    : y < -60 ? `${s.savedToast.toUpperCase()} ★`
+    : y > 60 ? s.skipped
+    : null;
   // Filtered decks: the offset takes the colour of this card's deck tile.
   const off = filtered ? deckOffset(cat.id) : null;
   const tint = off ? { '--offset': `rgba(${off.rgb}, .92)`, '--glow': `rgba(${off.rgb}, .2)`, '--label': off.label } : undefined;
@@ -217,13 +231,13 @@ export function QuestionCard({ s, lang, row, filtered, cardRef, dragX, onPointer
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
-      style={dragX ? {
+      style={x || y ? {
         ...tint,
-        transform: `translateX(${dragX}px) rotate(${-1.4 + dragX / 30}deg)`,
+        transform: dragTransform(dragged),
         transition: 'none',
-        boxShadow: dragX < 0 ? (() => {
-          // Offset (and its glow) fade toward 55% as the card is swiped away.
-          const k = Math.max(0.55, 0.92 + dragX / 400);
+        boxShadow: y > 0 ? (() => {
+          // Offset (and its glow) fade toward 55% as the card is skipped.
+          const k = Math.max(0.55, 0.92 - y / 400);
           const rgb = off ? off.rgb : '255,78,125';
           return `14px 16px 0 0 rgba(${rgb},${k}), 14px 16px 18px 0 rgba(${rgb},${k * 0.24}), 0 30px 50px -24px rgba(0,0,0,.8)`;
         })() : undefined,
@@ -242,7 +256,7 @@ export function QuestionCard({ s, lang, row, filtered, cardRef, dragX, onPointer
       <div className="tl-card__badges">
         {cat.note && <span className="tl-badge">{cat.note}</span>}
       </div>
-      {showSkipped && <span className="tl-card__skipped">{s.skipped}</span>}
+      {stamp && <span className="tl-card__stamp">{stamp}</span>}
     </div>
   );
 }
