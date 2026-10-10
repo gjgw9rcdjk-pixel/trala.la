@@ -9,8 +9,8 @@ export const CREATE_STRINGS = {
     next: 'Next',
     // 1 · idea
     ideaTitle: 'What’s the occasion?',
-    ideaHint: 'Describe who’s playing and why. The more detail, the better the cards.',
-    ideaPlaceholder: 'e.g. My mom turns 60. Family dinner, 12 people, three generations at the table…',
+    ideaHint: 'Describe in your own words who’s playing and why. The more detail, the better the cards.',
+    ideaPlaceholder: 'Who’s playing, and how many?\nWhat’s the occasion, and where?\nAny shared story or detail?\nWhat mood are you after?\nAnything to avoid?',
     examples: 'Try an example',
     deckLang: 'Card language',
     otherLang: 'Other…',
@@ -53,7 +53,17 @@ export const CREATE_STRINGS = {
     langNote: (l) => `Prototype cards are in English. The real one writes in ${l}.`,
     save: 'Save & play',
     // 4 · play
-    playHint: 'Your deck is saved. Tap or swipe the card, or use the arrows.',
+    play: 'Play',
+    resume: (i, n) => `Continue · ${i} / ${n}`,
+    fromStart: 'Start from the first card',
+    showTv: 'Show on TV',
+    onTv: 'On TV',
+    next: 'Next',
+    closePlay: 'Back to the deck',
+    endTitle: 'That’s the deck',
+    endHint: 'You’ve been through every card. Play it again, or pick another deck.',
+    playAgain: 'Play again',
+    toDeck: 'Back to deck',
     flamingoIntro: 'Before you start: in this deck, *flamingo* means sex. Swipe to begin.',
     of: 'of',
     prevCard: 'Previous card',
@@ -115,8 +125,8 @@ export const CREATE_STRINGS = {
     back: 'Atgal',
     next: 'Toliau',
     ideaTitle: 'Kokia proga?',
-    ideaHint: 'Parašyk, kas žais ir kodėl. Kuo daugiau detalių, tuo geresnės kortos.',
-    ideaPlaceholder: 'Pvz.: mamai 60. Šeimos vakarienė, 12 žmonių, trys kartos prie stalo…',
+    ideaHint: 'Parašyk savais žodžiais, kas žais ir kodėl. Kuo daugiau detalių, tuo geresnės kortos.',
+    ideaPlaceholder: 'Kas žais ir kiek jūsų?\nKokia proga ir kur?\nKokia bendra istorija ar detalė?\nKokios nuotaikos norisi?\nKo geriau vengti?',
     examples: 'Išbandyk pavyzdį',
     deckLang: 'Kortų kalba',
     otherLang: 'Kita…',
@@ -155,13 +165,23 @@ export const CREATE_STRINGS = {
     sampleNote: (n, total) => `Prototipas rodo ${n} pavyzdines kortas. Tikras parašys visas ${total}.`,
     langNote: (l) => `Prototipo kortos angliškos. Tikras rašys kalba: ${l}.`,
     save: 'Išsaugoti ir žaisti',
-    playHint: 'Kaladė išsaugota. Bakstelėk ar braukk kortą arba naudok rodykles.',
+    play: 'Žaisti',
+    resume: (i, n) => `Tęsti · ${i} / ${n}`,
+    fromStart: 'Pradėti nuo pirmos kortos',
+    showTv: 'Rodyti per TV',
+    onTv: 'Rodoma per TV',
+    next: 'Toliau',
+    closePlay: 'Atgal į kaladę',
+    endTitle: 'Kaladė baigta',
+    endHint: 'Perėjot visas kortas. Žaiskit dar kartą arba rinkitės kitą kaladę.',
+    playAgain: 'Žaisti iš naujo',
+    toDeck: 'Atgal į kaladę',
     flamingoIntro: 'Prieš pradedant: šioje kaladėje *flamingas* reiškia seksą. Braukk kortą ir pradėk.',
     of: 'iš',
     prevCard: 'Ankstesnė korta',
     nextCard: 'Kita korta',
     again: 'Iš naujo',
-    edit: 'Redaguoti kaladę',
+    edit: 'Redaguoti',
     newDeck: 'Kurti kitą kaladę',
     myDecks: 'Mano kaladės',
     savedLocal: 'Išsaugota tik šioje naršyklėje',
@@ -214,6 +234,54 @@ export const CREATE_STRINGS = {
 };
 
 // Deck languages offered up front; "Other…" accepts any language by name.
+// Example ideas on the Idea screen. Each one shows the shape of a good idea:
+// who's playing, the occasion, a concrete detail, the mood, what to avoid.
+// First date shares its text with the mock set of the same id (mockData.js),
+// so the owner's Mock mode still finds it; the others fall back to the
+// friends mock set.
+export const IDEA_EXAMPLES = [
+  {
+    id: 'fanNight',
+    chip: { en: '🎬 Fan night', lt: '🎬 Fanų vakaras' },
+    prompt: {
+      en: 'Six friends since college. We’re watching our favorite show’s finale at my place. We’ve all seen every season more than once and have our favorite characters and old arguments. Lots of laughs and hot takes. Nobody has seen the finale yet, so no spoilers.',
+      lt: 'Šeši draugai nuo studijų. Susirenkam pas mane žiūrėti mėgstamo serialo finalo. Visus sezonus matėm po kelis kartus, turim savo mėgstamus veikėjus ir senų ginčų. Norisi daug juoko ir karštų nuomonių. Finalo dar niekas nematė, tad be spoilerių.',
+    },
+  },
+  {
+    id: 'dateNight',
+    chip: { en: '❤️ Date night', lt: '❤️ Porų vakaras' },
+    prompt: {
+      en: 'Just the two of us, together 7 years, two kids. Finally a night without them: dinner at home. We want to laugh, remember how we met and learn something new about each other. It can go deeper, but no boring questions about chores.',
+      lt: 'Mes dviese, kartu 7 metai, du vaikai. Pagaliau vakaras be jų: vakarienė namie. Norim pasijuokti, prisiminti, kaip susipažinom, ir sužinoti vienas apie kitą ką nors naujo. Galima ir giliau, bet be banalių klausimų apie buitį.',
+    },
+  },
+  {
+    id: 'firstDate',
+    chip: { en: '💑 First date', lt: '💑 Pirmas pasimatymas' },
+    prompt: {
+      en: 'First date with someone from a dating app, we’ve only texted so far. We’re both around 30. Coffee, then a walk. Light and curious so the conversation keeps going, with a little flirting.',
+      lt: 'Pirmas pasimatymas su žmogumi iš pažinčių programėlės, iki šiol tik susirašinėjom. Abiem apie 30. Kava, paskui pasivaikščiojimas. Lengvai ir smalsiai, kad pokalbis nenutrūktų, su trupučiu flirto.',
+    },
+  },
+  {
+    id: 'icebreaker',
+    chip: { en: '🧊 Icebreaker', lt: '🧊 Susipažinimas' },
+    prompt: {
+      en: 'About 10 neighbors from a new apartment building, we barely know each other. Our first evening together, at the grill in the yard. Ages 25 to 70. Light and fun so everyone talks, even the shy ones. Nothing too personal.',
+      lt: 'Apie 10 kaimynų iš naujo daugiabučio, beveik nepažįstam vienas kito. Pirmas bendras vakaras kieme prie grilio. Amžius nuo 25 iki 70. Lengvai ir smagiai, kad prakalbėtų visi, net drovesni. Nieko per asmeniško.',
+    },
+  },
+  {
+    id: 'bachelorette',
+    chip: { en: '👰 Bachelorette', lt: '👰 Mergvakaris' },
+    prompt: {
+      en: '8 friends, Emma’s bachelorette. Some know her from school, some from work, a few have never met. A weekend at a country house. Bold and fun: stories about Emma, her fiancé Jake and our own adventures. Nothing about exes.',
+      lt: '8 draugės, Gintarės mergvakaris. Vienos ją pažįsta nuo mokyklos, kitos iš darbo, kai kurios viena kitos dar nematė. Savaitgalis sodyboje. Drąsiai ir linksmai: istorijos apie Gintarę, jos sužadėtinį Marių ir mūsų nuotykius. Nieko apie buvusius.',
+    },
+  },
+];
+
 export const DECK_LANGS = [
   { code: 'en', name: { en: 'English', lt: 'Anglų' } },
   { code: 'lt', name: { en: 'Lithuanian', lt: 'Lietuvių' } },
