@@ -58,7 +58,7 @@ export async function POST(request) {
   const adult = access.admin ? body.adult === true : access.adult;
   const answers = (Array.isArray(body.answers) ? body.answers : [])
     .slice(0, 5)
-    .map((a) => `- ${clip(a.question, 120)} → ${clip(a.answer, 40)}`)
+    .map((a) => `- ${clip(a.question, 120)} → ${clip(a.answer, 60)}`)
     .join('\n');
 
   const prompt = `Write a deck of exactly ${count} cards in ${deckLang} for this occasion:

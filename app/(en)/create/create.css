@@ -112,11 +112,24 @@
 
 /* ── 2 · clarify ───────────────────────────────────── */
 .tc-app .tc-refined { min-height: 120px; resize: none; overflow: hidden; line-height: 1.5; }
-.tc-app .tc-q { margin: 22px 0 0; padding: 0; border: 0; min-width: 0; }
-.tc-app .tc-q__title { padding: 0; margin-bottom: 10px; font: 800 17px var(--display); letter-spacing: -.02em; color: var(--card); }
+.tc-app .tc-q { margin: 18px 0 0; padding: 0; border: 0; min-width: 0; }
+.tc-app .tc-q__title { padding: 0; margin-bottom: 8px; font: 800 17px var(--display); letter-spacing: -.02em; color: var(--card); }
 .tc-app .tc-q__note { margin: -4px 0 10px; font-size: 14px; line-height: 1.4; color: var(--card); opacity: .7; }
 .tc-app .tc-q__note .tl-flamingo { color: var(--pink); }
 .tc-app .tc-q__opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.tc-app .tc-q__text { height: 50px; font-size: 16px; }
+.tc-app .tc-q:first-of-type { margin-top: 0; }
+
+/* What Tralala understood: folded to two lines under the questions. */
+.tc-app .tc-brief { margin-top: 24px; padding: 14px 16px; border-radius: 16px; background: var(--raised); border: 1px solid var(--raised-border); }
+.tc-app .tc-brief__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tc-app .tc-brief .tc-label { margin: 0; }
+.tc-app .tc-brief .tl-link { flex: none; padding: 6px 0 6px 12px; }
+.tc-app .tc-brief__text {
+  margin: 6px 0 0; font: 500 14px/1.5 var(--body); color: var(--t2);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tc-app .tc-brief .tc-refined { margin-top: 10px; }
 
 /* ── 3 · deck ──────────────────────────────────────── */
 .tc-app .tc-name { font: 800 18px var(--display); letter-spacing: -.01em; }
