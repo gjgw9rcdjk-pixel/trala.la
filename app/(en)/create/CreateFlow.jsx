@@ -303,6 +303,8 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
           name: { en: '', lt: '' },
           questions: r.questions.map((q) => ({
             q: { en: q.question, lt: q.question },
+            kind: q.kind,
+            placeholder: q.placeholder,
             options: q.options.map((o) => ({ en: o, lt: o })),
           })),
         });
@@ -361,7 +363,11 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
     let got = 0;
     try {
       const picked = set.questions
-        .map((q, i) => answers[i] != null && { question: q.q[ui], answer: q.options[answers[i]][ui] })
+        .map((q, i) => {
+          const a = answers[i];
+          if (q.kind === 'text') return a?.trim() && { question: q.q[ui], answer: a.trim() };
+          return a != null && { question: q.q[ui], answer: q.options[a][ui] };
+        })
         .filter(Boolean);
       const res = await post('deck', { brief: refined, answers: picked, deckLang: deckLangForAi, count, adult: adultOn, model: mode.model }, ctrl.signal);
       await readLines(res, (m) => {
@@ -609,7 +615,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
           <UiLang ui={ui} setUi={setUi} />
         </header>
 
-        {!admin && step < 3 && (
+        {!admin && step !== 1 && step < 3 && (
           <div className="tc-pass">
             <span><b>{s.decksLeft(pass.left)}</b> · {s.until(new Date(pass.expiresAt).toLocaleDateString(ui === 'lt' ? 'lt-LT' : 'en-GB'))}</span>
             {!busy && !writing && <button className="tl-link" onClick={forgetCode}>{s.otherCode}</button>}
@@ -931,33 +937,41 @@ const grow = (el) => {
   el.style.height = `${el.scrollHeight + 2}px`;
 };
 
+// Questions first (all optional; tap a chosen answer again to clear it),
+// then what Tralala understood, folded to two lines with an Edit button.
 function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers, adultHint, adult, setAdult }) {
+  const [editing, setEditing] = useState(false);
+  const total = set.questions.length;
+  const done = set.questions.filter((q, i) => (q.kind === 'text' ? answers[i]?.trim() : answers[i] != null)).length;
+  const pick = (qi, oi) => setAnswers((a) => {
+    const next = { ...a };
+    if (next[qi] === oi) delete next[qi]; else next[qi] = oi;
+    return next;
+  });
   return (
     <div className="tc-body">
-      <Head title={s.clarifyTitle} hint={s.clarifyHint} />
-      <div className="tc-label tc-label--ai">✦ {s.refined}</div>
-      <textarea
-        ref={grow}
-        className="tl-field tc-refined"
-        value={refined}
-        onChange={(e) => { setRefined(e.target.value); grow(e.target); }}
-        aria-label={s.refined}
-      />
+      <Head title={s.clarifyTitle} hint={`${s.clarifyHint} ${s.answered(done, total)}`} />
       {set.questions.map((q, qi) => (
         <fieldset key={qi} className="tc-q">
           <legend className="tc-q__title">{q.q[ui]}</legend>
-          <div className="tc-q__opts">
-            {q.options.map((o, oi) => (
-              <button
-                key={oi}
-                className="tl-chip tc-chip"
-                aria-pressed={answers[qi] === oi}
-                onClick={() => setAnswers((a) => ({ ...a, [qi]: oi }))}
-              >
-                {o[ui]}
-              </button>
-            ))}
-          </div>
+          {q.kind === 'text' ? (
+            <input
+              className="tl-field tc-q__text"
+              value={answers[qi] || ''}
+              maxLength={60}
+              onChange={(e) => setAnswers((a) => ({ ...a, [qi]: e.target.value }))}
+              placeholder={q.placeholder}
+              aria-label={q.q[ui]}
+            />
+          ) : (
+            <div className="tc-q__opts">
+              {q.options.map((o, oi) => (
+                <button key={oi} className="tl-chip tc-chip" aria-pressed={answers[qi] === oi} onClick={() => pick(qi, oi)}>
+                  {o[ui]}
+                </button>
+              ))}
+            </div>
+          )}
         </fieldset>
       ))}
       {adultHint && (
@@ -970,6 +984,27 @@ function ClarifyStep({ s, ui, set, refined, setRefined, answers, setAnswers, adu
           </div>
         </fieldset>
       )}
+
+      <div className="tc-brief" data-open={editing}>
+        <div className="tc-brief__head">
+          <span className="tc-label tc-label--ai">✦ {s.refined}</span>
+          <button className="tl-link" onClick={() => setEditing((e) => !e)} aria-expanded={editing}>
+            {editing ? s.briefDone : s.briefEdit}
+          </button>
+        </div>
+        {editing ? (
+          <textarea
+            ref={grow}
+            className="tl-field tc-refined"
+            value={refined}
+            onChange={(e) => { setRefined(e.target.value); grow(e.target); }}
+            aria-label={s.refined}
+            autoFocus
+          />
+        ) : (
+          <p className="tc-brief__text">{refined}</p>
+        )}
+      </div>
     </div>
   );
 }
