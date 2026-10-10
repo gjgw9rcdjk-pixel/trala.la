@@ -11,9 +11,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { NeonFlamingo, QText, qSizeClass } from '@/app/game/parts';
 import { ShareSheet } from '@/app/game/share';
-import { TvButton, TvSheet, useTvRemote } from '@/app/game/tv';
+import { TvButton, TvIcon, TvSheet, useTvRemote } from '@/app/game/tv';
 import { GAME_STRINGS } from '@/lib/gameStrings';
-import { CREATE_STRINGS, DECK_LANGS, STEPS } from './strings';
+import { CREATE_STRINGS, DECK_LANGS, IDEA_EXAMPLES, STEPS } from './strings';
 import { DECK_SIZE, MOCK_SETS, setForIdea } from './mockData';
 import '@/app/game/game.css';
 import './create.css';
@@ -22,6 +22,7 @@ const DECKS_KEY = 'tralala.customDecks';
 const TIP_KEY = 'tralala.create.dragTipSeen';
 const MODE_KEY = 'tralala.create.mode';
 const CODE_KEY = 'tralala.create.code';
+const PROGRESS_KEY = 'tralala.create.progress'; // { deckId: card index }
 const THINK_MS = 1600;
 const SWAP_MS = 700;
 // Mock "live writing": name first, then one card at a time.
@@ -200,10 +201,14 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
   const [saved, setSaved] = useState([]);
   const [playing, setPlaying] = useState(null);
   const [cardIdx, setCardIdx] = useState(0);
+  // Play has three views: the deck's cover, the cards, and the end.
+  const [view, setView] = useState('cover');
+  const [progress, setProgress] = useState({});
 
   useEffect(() => {
     setTipSeen(readJson(TIP_KEY, false));
     setSaved(readJson(DECKS_KEY, []));
+    setProgress(readJson(PROGRESS_KEY, {}));
     if (admin) { setModeState((m) => ({ ...m, ...readJson(MODE_KEY, {}) })); return; }
     // A shared link carries ?code=...; take it out of the address bar at once.
     const url = new URL(window.location.href);
@@ -479,8 +484,10 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
 
   const saveAndPlay = () => {
     const entry = storeDeck(deck);
+    keepPlace(entry.id, 0); // an edited deck starts from the first card
     setPlaying(entry);
     setCardIdx(0);
+    setView('cover');
     setStep(3);
   };
 
@@ -511,9 +518,52 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
   // An 18+ deck opens with a card that explains the *flamingo* word.
   const playDeck = playing?.adult ? { ...playing, cards: [s.flamingoIntro, ...playing.cards] } : playing;
 
+  // Where each deck was left, so its cover can offer "Continue". A deck
+  // played to the end (or edited) starts from the first card again.
+  const keepPlace = (id, i) => {
+    setProgress((p) => {
+      const next = { ...p };
+      if (i > 0) next[id] = i; else delete next[id];
+      writeJson(PROGRESS_KEY, next);
+      return next;
+    });
+  };
+  const playFrom = (i) => { setCardIdx(i); setView('cards'); };
+  const openDeck = (d) => { setPlaying(d); setCardIdx(0); setView('cover'); };
+  const goCard = (d) => {
+    const i = cardIdx + d;
+    if (i < 0) return;
+    if (i >= playDeck.cards.length) { keepPlace(playing.id, 0); setView('end'); return; }
+    setCardIdx(i);
+    keepPlace(playing.id, i);
+  };
+  const playingCards = step === 3 && view === 'cards' && Boolean(playDeck);
+
+  // Keep the screen on while the cards are out: the phone lies on the table
+  // or goes round the group. Browsers without it just dim as usual.
+  useEffect(() => {
+    if (!playingCards || !navigator.wakeLock) return undefined;
+    let lock = null;
+    let done = false;
+    const take = () => {
+      if (document.visibilityState !== 'visible') return;
+      navigator.wakeLock.request('screen').then((l) => {
+        if (done) l.release().catch(() => {}); else lock = l;
+      }).catch(() => { /* low battery or not allowed */ });
+    };
+    take();
+    // The browser drops the lock when the tab is hidden; take it again on return.
+    document.addEventListener('visibilitychange', take);
+    return () => {
+      done = true;
+      document.removeEventListener('visibilitychange', take);
+      lock?.release().catch(() => {});
+    };
+  }, [playingCards]);
+
   // TV mode: this deck lives only on the phone, so the TV gets the text itself.
   const [tvOpen, setTvOpen] = useState(false);
-  const tv = useTvRemote(step === 3 && playDeck
+  const tv = useTvRemote(playingCards
     ? { kind: 'text', text: playDeck.cards[cardIdx], lang: ui, label: playDeck.name, i: cardIdx + 1, n: playDeck.cards.length }
     : { kind: 'idle' });
 
@@ -546,6 +596,11 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
   return (
     <div className="tl-shell">
       <div className="tl-app tc-app">
+        {playingCards ? (
+          <PlayCards s={s} deck={playDeck} idx={cardIdx} onGo={goCard} onClose={() => setView('cover')}
+            onShare={setShareText} shareLabel={GAME_STRINGS[ui].ariaShare}
+            tvButton={<TvButton tv={tv} label={GAME_STRINGS[ui].ariaTv} onClick={() => setTvOpen(true)} />} />
+        ) : (<>
         <header className="tc-top">
           <span className="tl-wordmark tl-wordmark--still tc-wordmark">
             Tralala<span className="tl-wordmark__tld">.cards</span>
@@ -554,14 +609,14 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
           <UiLang ui={ui} setUi={setUi} />
         </header>
 
-        {!admin && (
+        {!admin && step < 3 && (
           <div className="tc-pass">
             <span><b>{s.decksLeft(pass.left)}</b> · {s.until(new Date(pass.expiresAt).toLocaleDateString(ui === 'lt' ? 'lt-LT' : 'en-GB'))}</span>
             {!busy && !writing && <button className="tl-link" onClick={forgetCode}>{s.otherCode}</button>}
           </div>
         )}
 
-        {admin && <div className="tc-mode" role="group" aria-label="Prototype mode">
+        {admin && step < 3 && <div className="tc-mode" role="group" aria-label="Prototype mode">
           <div className="tc-seg">
             {['mock', 'ai'].map((m) => (
               <button key={m} aria-pressed={mode.source === m} disabled={busy} onClick={() => setMode({ source: m })}>
@@ -581,7 +636,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
           <span className="tc-mode__note">{ai ? s.modeAi : s.modeMock}</span>
         </div>}
 
-        <nav className="tc-steps" aria-label="Progress">
+        {step < 3 && <nav className="tc-steps" aria-label="Progress">
           {STEPS.map((id, i) => (
             <button
               key={id}
@@ -595,7 +650,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
               <span className="tc-step__label">{s.steps[id]}</span>
             </button>
           ))}
-        </nav>
+        </nav>}
 
         <div className="tl-scroll tc-scroll" ref={scrollRef}>
           {error && !busy && (
@@ -631,10 +686,12 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
                 !editing && set?.id !== 'ai' && count > deck.cards.length && s.sampleNote(deck.cards.length, count),
                 set?.id !== 'ai' && textLang === 'en' && lang !== 'en' && s.langNote(langName),
               ].filter(Boolean)} />
+          ) : step === 3 && playing && view === 'end' ? (
+            <PlayEnd s={s} deck={playDeck} />
           ) : step === 3 && playing ? (
-            <PlayStep s={s} deck={playDeck} idx={cardIdx} onGo={(d) => setCardIdx((i) => (i + d + playDeck.cards.length) % playDeck.cards.length)}
-              saved={saved} onOpen={(d) => { setPlaying(d); setCardIdx(0); }} onShare={setShareText} shareLabel={GAME_STRINGS[ui].ariaShare}
-              tvButton={<TvButton tv={tv} label={GAME_STRINGS[ui].ariaTv} onClick={() => setTvOpen(true)} />} />
+            <PlayCover s={s} ui={ui} deck={playDeck} resumeAt={progress[playing.id] || 0} onRestart={() => playFrom(0)}
+              tvOn={tv.status === 'on'} onTv={() => setTvOpen(true)} onEdit={editPlaying}
+              saved={saved} onOpen={openDeck} onNew={outOfDecks ? null : startOver} />
           ) : null}
         </div>
 
@@ -654,14 +711,23 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
                 {writing ? s.writingBtn(deck?.cards.length || 0, writing.total) : s.save}
               </button>
             )}
-            {step === 3 && (
+            {step === 3 && playing && view === 'cover' && (() => {
+              const at = Math.min(progress[playing.id] || 0, playDeck.cards.length - 1);
+              return (
+                <button className="tl-btn tl-btn--primary" onClick={() => playFrom(at)}>
+                  {at > 0 ? s.resume(at + 1, playDeck.cards.length) : s.play}
+                </button>
+              );
+            })()}
+            {step === 3 && playing && view === 'end' && (
               <>
-                <button className="tl-btn tl-btn--secondary" onClick={editPlaying}>{s.edit}</button>
-                <button className="tl-btn tl-btn--secondary" disabled={outOfDecks} onClick={startOver}>{s.newDeck}</button>
+                <button className="tl-btn tl-btn--secondary" onClick={() => setView('cover')}>{s.toDeck}</button>
+                <button className="tl-btn tl-btn--primary" onClick={() => playFrom(0)}>{s.playAgain}</button>
               </>
             )}
           </footer>
         )}
+        </>)}
         {tvOpen && <TvSheet s={GAME_STRINGS[ui]} tv={tv} onClose={() => setTvOpen(false)} />}
         {shareText && (
           <ShareSheet s={GAME_STRINGS[ui]} lang={ui} text={shareText} onClose={() => setShareText(null)} />
@@ -797,39 +863,52 @@ function Thinking({ lines, wait: waitNote }) {
 }
 
 // ── 1 · idea ────────────────────────────────────────────────────────────
+const CARD_COUNTS = [15, 20, 25, 30, 35, 40, 45, 50];
+
 function IdeaStep({ s, ui, idea, setIdea, lang, setLang, otherLang, setOtherLang, count, setCount }) {
   return (
-    <div className="tc-body">
+    <div className="tc-body tc-body--fill">
       <Head title={s.ideaTitle} hint={s.ideaHint} />
-      <div className="tl-textarea-wrap">
+      {/* The field takes the height left over, so the whole step fits one
+          screen; the counter has its own row and text never runs under it. */}
+      <div className="tc-idea">
         <textarea
-          className="tl-field"
+          className="tc-idea__text"
           value={idea}
           maxLength={400}
           onChange={(e) => setIdea(e.target.value)}
           placeholder={s.ideaPlaceholder}
           aria-label={s.ideaTitle}
         />
-        <span className="tl-counter">{idea.length}/400</span>
+        <span className="tc-idea__count">{idea.length}/400</span>
       </div>
 
       <div className="tc-label">{s.examples}</div>
       <div className="tc-chips">
-        {MOCK_SETS.map((m) => (
+        {IDEA_EXAMPLES.map((m) => (
           <button key={m.id} className="tl-chip tc-chip" aria-pressed={idea === m.prompt[ui]} onClick={() => setIdea(m.prompt[ui])}>
             {m.chip[ui]}
           </button>
         ))}
       </div>
 
-      <label className="tl-select-row tc-lang">
-        <span>{s.deckLang}</span>
-        <b>{lang === 'other' ? s.otherLang : DECK_LANGS.find((l) => l.code === lang).name[ui]} ▾</b>
-        <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={s.deckLang}>
-          {DECK_LANGS.map((l) => <option key={l.code} value={l.code}>{l.name[ui]}</option>)}
-          <option value="other">{s.otherLang}</option>
-        </select>
-      </label>
+      <div className="tc-picks">
+        <label className="tc-pick">
+          <span>{s.deckLang}</span>
+          <b>{lang === 'other' ? s.otherLang : DECK_LANGS.find((l) => l.code === lang).name[ui]} ▾</b>
+          <select value={lang} onChange={(e) => setLang(e.target.value)} aria-label={s.deckLang}>
+            {DECK_LANGS.map((l) => <option key={l.code} value={l.code}>{l.name[ui]}</option>)}
+            <option value="other">{s.otherLang}</option>
+          </select>
+        </label>
+        <label className="tc-pick">
+          <span>{s.cardCount}</span>
+          <b>{count} ▾</b>
+          <select value={count} onChange={(e) => setCount(Number(e.target.value))} aria-label={s.cardCount}>
+            {CARD_COUNTS.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
       {lang === 'other' && (
         <input
           className="tl-field tc-other"
@@ -840,23 +919,6 @@ function IdeaStep({ s, ui, idea, setIdea, lang, setLang, otherLang, setOtherLang
           autoFocus
         />
       )}
-
-      <div className="tc-count">
-        <label className="tc-label" htmlFor="tc-count">{s.cardCount}</label>
-        <output className="tc-count__value" htmlFor="tc-count">{count}</output>
-      </div>
-      <input
-        id="tc-count"
-        className="tc-range"
-        type="range"
-        min={15}
-        max={50}
-        step={5}
-        value={count}
-        onChange={(e) => setCount(Number(e.target.value))}
-        style={{ '--fill': `${((count - 15) / 35) * 100}%` }}
-      />
-      <div className="tc-range__ends"><span>15</span><span>50</span></div>
     </div>
   );
 }
@@ -1058,17 +1120,14 @@ function PrepLine({ lines }) {
 const SWIPE_COMMIT = 90;
 const tilt = (x) => `translateX(${x}px) rotate(${-1.4 + x / 30}deg)`;
 
-function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvButton }) {
+// The cards, full screen: wordmark, counter, TV and close on top, the card in the
+// middle, Back and Next under the thumb. Tap or swipe the card works too.
+function PlayCards({ s, deck, idx, onGo, onClose, onShare, shareLabel, tvButton }) {
   const text = deck.cards[idx];
   const cardRef = useRef(null);
   const busy = useRef(false);
   const drag = useRef(null);
   const [dragX, setDragX] = useState(0);
-  const [open, setOpen] = useState(false);
-  const listRef = useRef(null);
-  useEffect(() => {
-    if (open) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [open]);
 
   const still = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -1078,6 +1137,7 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvBu
     const el = cardRef.current;
     const delta = dir < 0 ? 1 : -1;
     if (busy.current) return;
+    if (delta < 0 && idx === 0) { setDragX(0); return; }
     if (!el?.animate || still()) { setDragX(0); onGo(delta); return; }
     busy.current = true;
     const out = el.animate(
@@ -1163,10 +1223,19 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvBu
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const n = deck.cards.length;
   return (
-    <div className="tc-body">
-      <Head title={deck.name} hint={s.playHint} />
-      <div className="tl-card-area tc-card-area">
+    <div className="tl-screen tc-play">
+      <div className="tl-topbar tl-topbar--deck tc-play__top">
+        <span className="tl-wordmark tl-wordmark--still tc-wordmark">
+          Tralala<span className="tl-wordmark__tld">.cards</span>
+        </span>
+        <span className="tl-topbar__center">{idx + 1} / {n}</span>
+        {tvButton}
+        <button className="tl-icon-sm" onClick={onClose} aria-label={s.closePlay}>✕</button>
+      </div>
+      <div className="tl-progress"><div style={{ width: `${((idx + 1) / n) * 100}%` }} /></div>
+      <div className="tl-card-area">
         <div
           ref={cardRef}
           className="tl-card tc-card"
@@ -1188,14 +1257,44 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvBu
           <p className={qSizeClass(text)} lang={deck.lang}><QText text={text} /></p>
         </div>
       </div>
+      <div className="tl-band tc-play__band">
+        <button className="tl-icon-btn" onClick={prev} disabled={idx === 0} aria-label={s.prevCard}>←</button>
+        <button className="tl-btn tl-btn--primary" onClick={next}>{s.next}</button>
+      </div>
+    </div>
+  );
+}
 
-      <div className="tc-nav">
-        <button className="tl-icon-btn" onClick={prev} aria-label={s.prevCard}>←</button>
-        <span className="tc-nav__mid">
-          <span className="tc-nav__count">{idx + 1} / {deck.cards.length}</span>
-          {tvButton}
-        </span>
-        <button className="tl-icon-btn" onClick={next} aria-label={s.nextCard}>→</button>
+const langLabel = (code, ui) => DECK_LANGS.find((l) => l.code === code)?.name[ui] || code;
+
+// The deck's cover: what it is, one big Play (or Continue) in the footer,
+// TV and editing next to it, and the other saved decks below.
+function PlayCover({ s, ui, deck, resumeAt, onRestart, tvOn, onTv, onEdit, saved, onOpen, onNew }) {
+  const [open, setOpen] = useState(false);
+  const listRef = useRef(null);
+  useEffect(() => {
+    if (open) listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [open]);
+  const n = deck.cards.length;
+  return (
+    <div className="tc-body tc-cover">
+      <div className="tc-cover__stack">
+        <span className="tc-cover__back tc-cover__back--blue" aria-hidden="true" />
+        <span className="tc-cover__back tc-cover__back--yellow" aria-hidden="true" />
+        <div className="tl-card tc-cover__card">
+          <div className="tl-card__label">{s.cardsCount(n)} · {langLabel(deck.lang, ui)}</div>
+          <h1 className="tc-cover__name">{deck.name}</h1>
+        </div>
+      </div>
+      {resumeAt > 0 && resumeAt < n && (
+        <button className="tl-link tc-cover__restart" onClick={onRestart}>{s.fromStart}</button>
+      )}
+
+      <div className="tc-cover__acts">
+        <button className="tl-btn tl-btn--secondary tc-cover__tv" data-on={tvOn} onClick={onTv}>
+          <TvIcon /> {tvOn ? s.onTv : s.showTv}
+        </button>
+        <button className="tl-btn tl-btn--secondary" onClick={onEdit}>{s.edit}</button>
       </div>
 
       <button
@@ -1228,7 +1327,22 @@ function PlayStep({ s, deck, idx, onGo, saved, onOpen, onShare, shareLabel, tvBu
           })}
         </div>
       )}
+      {onNew && <button className="tl-row tc-cover__new" onClick={onNew}>+ {s.newDeck}</button>}
       <p className="tl-note tc-local">{s.savedLocal}</p>
+    </div>
+  );
+}
+
+function PlayEnd({ s, deck }) {
+  return (
+    <div className="tc-body tc-end">
+      <div className="tc-cover__stack" aria-hidden="true">
+        <span className="tc-cover__back tc-cover__back--blue" />
+        <span className="tc-cover__back tc-cover__back--yellow" />
+        <div className="tl-card tc-cover__card"><NeonFlamingo className="tl-flamingo tc-end__flamingo" /></div>
+      </div>
+      <Head title={s.endTitle} hint={s.endHint} />
+      <p className="tl-note">{deck.name} · {s.cardsCount(deck.cards.length)}</p>
     </div>
   );
 }

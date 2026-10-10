@@ -45,7 +45,7 @@
 .tc-app .tc-label--ai { margin-top: 0; color: var(--pink); }
 
 .tc-app .tc-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.tc-app .tc-chip { text-transform: none; letter-spacing: 0; font-size: 13px; padding: 10px 14px; }
+.tc-app .tc-chip { text-transform: none; letter-spacing: 0; font-size: 13px; padding: 9px 13px; }
 .tc-app .tc-other { margin-top: 10px; }
 .tc-app input.tl-field, .tc-app textarea.tl-field { font-size: 16px; } /* no iOS zoom on focus */
 
@@ -163,7 +163,6 @@
 .tc-app .tc-row__acts button:disabled { opacity: .4; }
 
 /* ── 4 · play ──────────────────────────────────────── */
-.tc-app .tc-card-area { flex: none; padding: 4px 6px 22px; }
 .tc-app .tc-card { min-height: 300px; display: flex; flex-direction: column; }
 .tc-app .tc-card .tl-card__q { flex: 1; font-size: 28px; }
 .tc-app .tc-card .tl-card__q--m { font-size: 25px; }
@@ -186,41 +185,66 @@
 .tc-app .tc-saved__row:disabled .tc-saved__go { color: var(--t4); }
 .tc-app .tc-local { margin-top: 10px; }
 
+/* ── play: cover · cards · end ─────────────────────── */
+/* Cover and end sit in the middle of the free height, above the footer. */
+.tc-app .tc-cover, .tc-app .tc-end { min-height: 100%; justify-content: center; }
+.tc-app .tc-cover__stack { position: relative; margin: 26px 18px 30px; }
+.tc-app .tc-cover__back { position: absolute; inset: 0; border-radius: 22px; }
+.tc-app .tc-cover__back--blue { background: var(--blue); transform: rotate(5deg) translate(10px, 6px); }
+.tc-app .tc-cover__back--yellow { background: var(--yellow); transform: rotate(-6deg) translate(-8px, 4px); }
+.tc-app .tc-cover__card { min-height: 220px; display: flex; flex-direction: column; justify-content: space-between; cursor: default; touch-action: auto; }
+.tc-app .tc-cover__name { margin: 18px 0 0; font: 800 32px/1.05 var(--display); letter-spacing: -.03em; color: var(--ink); overflow-wrap: anywhere; }
+.tc-app .tc-cover__restart { align-self: center; margin: -10px 0 14px; padding: 8px; }
+.tc-app .tc-cover__acts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin-bottom: 12px; }
+.tc-app .tc-cover__acts .tl-btn { width: auto; gap: 8px; white-space: nowrap; }
+.tc-app .tc-cover__tv svg { width: 20px; height: 20px; flex: none; }
+.tc-app .tc-cover__tv[data-on="true"] { background: rgba(255, 78, 125, .18); box-shadow: 0 0 0 1px var(--pink); }
+.tc-app .tc-cover__new { margin-top: 8px; height: 56px; cursor: pointer; font: 800 14px var(--body); color: var(--card); }
+.tc-app .tc-cover__new:disabled { color: var(--t4); cursor: default; }
+
+.tc-app .tc-play__top .tl-topbar__center { margin: 0 auto; font-size: 13px; letter-spacing: .08em; }
+.tc-app .tc-play__top .tc-wordmark { flex: none; }
+.tc-app .tc-play .tl-card-area { padding-top: 10px; }
+.tc-app .tc-play__band { padding-bottom: calc(env(safe-area-inset-bottom) + 14px); }
+.tc-app .tc-play__band .tl-icon-btn { flex: none; }
+
+.tc-app .tc-end .tc-cover__card { background: var(--ink); border: 1px solid rgba(255, 255, 255, .12); align-items: center; justify-content: center; }
+.tc-app .tc-end__flamingo { width: 110px; height: auto; }
+.tc-app .tc-end .tc-head { padding-top: 0; }
+
 @media (prefers-reduced-motion: reduce) {
   .tc-app *, .tc-app *::before, .tc-app *::after { animation: none !important; transition: none !important; }
 }
-.tc-app .tc-lang { margin-top: 22px; }
+/* ── idea step: fits one phone screen ──────────────── */
+.tc-app .tc-body--fill { min-height: 100%; padding-bottom: 12px; }
+.tc-app .tc-body--fill .tc-head { padding: 14px 0 12px; }
+.tc-app .tc-idea {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 170px; max-height: 320px;
+  border-radius: 16px; background: var(--raised); border: 1px solid rgba(255, 255, 255, .12);
+}
+.tc-app .tc-idea:focus-within { border-color: var(--pink); box-shadow: inset 0 0 0 1px var(--pink); }
+.tc-app .tc-idea__text {
+  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; background: transparent;
+  padding: 12px 16px 2px; font: 600 16px/1.5 var(--body); color: var(--card); /* 16px: no iOS zoom on focus */
+}
+.tc-app .tc-idea__text::placeholder { color: var(--t3); }
+.tc-app .tc-idea__text:focus { outline: none; }
+.tc-app .tc-idea__count { align-self: flex-end; padding: 0 16px 10px; font: 600 12px var(--body); color: var(--t3); pointer-events: none; }
+.tc-app .tc-body--fill .tc-label { margin: 14px 0 8px; }
+.tc-app .tc-body--fill .tc-chip { padding: 8px 12px; }
 
-/* ── card count slider (15–50) ─────────────────────── */
-.tc-app .tc-count { display: flex; align-items: baseline; justify-content: space-between; }
-.tc-app .tc-count__value { font: 800 28px var(--display); letter-spacing: -.02em; color: var(--card); }
-.tc-app .tc-range {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 36px; margin: 2px 0 0;
-  background: transparent; cursor: pointer; touch-action: pan-y;
+/* language + card count: two pickers side by side */
+.tc-app .tc-picks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.tc-app .tc-pick {
+  position: relative; display: flex; flex-direction: column; justify-content: center; gap: 3px; height: 58px; min-width: 0;
+  padding: 0 16px; border-radius: 16px; background: var(--raised); border: 1px solid var(--raised-border);
 }
-.tc-app .tc-range::-webkit-slider-runnable-track {
-  height: 8px; border-radius: 4px;
-  background: linear-gradient(to right, var(--pink) var(--fill), rgba(255, 255, 255, .12) var(--fill));
-}
-.tc-app .tc-range::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .12); }
-.tc-app .tc-range::-moz-range-progress { height: 8px; border-radius: 4px; background: var(--pink); }
-.tc-app .tc-range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 28px; height: 28px; margin-top: -10px; border-radius: 50%;
-  background: var(--card); border: 0; box-shadow: 0 0 0 4px rgba(255, 78, 125, .35), 0 4px 10px rgba(0, 0, 0, .5);
-}
-.tc-app .tc-range::-moz-range-thumb {
-  width: 28px; height: 28px; border-radius: 50%; border: 0;
-  background: var(--card); box-shadow: 0 0 0 4px rgba(255, 78, 125, .35), 0 4px 10px rgba(0, 0, 0, .5);
-}
-.tc-app .tc-range:focus-visible { outline: none; }
-.tc-app .tc-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--pink); }
-.tc-app .tc-range__ends { display: flex; justify-content: space-between; font: 700 11px var(--body); color: var(--t4); }
+.tc-app .tc-pick span { font: 800 10px var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--t4); }
+.tc-app .tc-pick b { font: 800 15px var(--body); color: var(--card); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-app .tc-pick select { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; font-size: 16px; }
+.tc-app .tc-pick:focus-within { border: 2px solid var(--pink); padding: 0 15px; }
 
 /* prev / next under the card */
-.tc-app .tc-nav { display: flex; align-items: center; justify-content: space-between; margin: 0 0 18px; }
-.tc-app .tc-nav .tl-icon-btn { height: 52px; width: 64px; font-size: 20px; }
-.tc-app .tc-nav__count { font: 800 13px var(--body); letter-spacing: .08em; color: var(--t2); }
-.tc-app .tc-nav__mid { display: flex; align-items: center; gap: 12px; }
 
 /* ── prototype mode bar (Mock / AI, model) ─────────── */
 .tc-app .tc-mode { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 24px 0; flex-wrap: wrap; }

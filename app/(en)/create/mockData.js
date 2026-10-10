@@ -52,8 +52,8 @@ export const MOCK_SETS = [
     id: 'firstDate',
     chip: { en: '💑 First date', lt: '💑 Pirmas pasimatymas' },
     prompt: {
-      en: 'First date over dinner. We met on an app, want something fun that isn’t a job interview.',
-      lt: 'Pirmas pasimatymas per vakarienę. Susipažinome programėlėje, norisi smagiai, ne kaip darbo pokalbyje.',
+      en: 'First date with someone from a dating app, we’ve only texted so far. We’re both around 30. Coffee, then a walk. Light and curious so the conversation keeps going, with a little flirting.',
+      lt: 'Pirmas pasimatymas su žmogumi iš pažinčių programėlės, iki šiol tik susirašinėjom. Abiem apie 30. Kava, paskui pasivaikščiojimas. Lengvai ir smalsiai, kad pokalbis nenutrūktų, su trupučiu flirto.',
     },
     refined: {
       en: 'A deck for a first date over dinner, two people who met on an app. Starts light and playful, gets a little deeper by dessert. Nothing too personal, nothing about exes.',

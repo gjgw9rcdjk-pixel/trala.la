@@ -43,7 +43,9 @@
   flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 0 clamp(24px, 6vw, 120px) clamp(16px, 4vh, 48px);
 }
-.tv-card-wrap { position: relative; width: min(100%, 1500px); padding-top: 13vh; }
+/* Card-shaped, not a banner: width follows the screen height so a wide TV
+   doesn’t stretch it into a strip; 16:9 is a floor, long text grows it. */
+.tv-card-wrap { position: relative; width: min(100%, 104vh); padding-top: 13vh; }
 .tv-card-wrap[data-dir="next"] { animation: tv-in-next .42s cubic-bezier(.2, .7, .3, 1) both; }
 .tv-card-wrap[data-dir="back"] { animation: tv-in-back .42s cubic-bezier(.2, .7, .3, 1) both; }
 
@@ -57,7 +59,7 @@
 .tv .tv-peek .tl-flamingo { width: 100%; height: 100%; }
 
 .tv .tv-card {
-  position: relative; z-index: 1; width: 100%; cursor: default; touch-action: auto;
+  position: relative; z-index: 1; width: 100%; aspect-ratio: 16 / 9; cursor: default; touch-action: auto;
   padding: clamp(28px, 4.5vh, 64px) clamp(32px, 4vw, 80px) clamp(32px, 5vh, 72px);
   border-radius: clamp(22px, 2.4vw, 40px);
   box-shadow: clamp(14px, 1.4vw, 26px) clamp(16px, 1.6vw, 30px) 0 0 var(--offset),
@@ -70,7 +72,7 @@
 .tv-card__count { color: var(--muted-on-card); }
 .tv-card__q {
   margin: clamp(12px, 2vh, 28px) 0 0;
-  font: 800 clamp(36px, 4.8vw, 104px)/1.12 var(--display); letter-spacing: -.025em;
+  font: 800 clamp(32px, min(4.2vw, 7.4vh), 180px)/1.12 var(--display); letter-spacing: -.025em;
   text-wrap: pretty; overflow-wrap: break-word;
 }
 

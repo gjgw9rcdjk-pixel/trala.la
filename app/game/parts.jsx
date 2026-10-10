@@ -52,14 +52,35 @@ export function BottomNav({ current, onGo, s, showInstall }) {
   );
 }
 
+// How much of the page the on-screen keyboard covers. Phones shrink only the
+// visual viewport when it opens, so a sheet stuck to the bottom would stay
+// behind the keyboard (the TV code field on iPhone); the sheet lifts by this.
+function useKeyboardInset() {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const update = () => setInset(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)));
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+  return inset;
+}
+
 export function Sheet({ onClose, children, label }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+  const keyboard = useKeyboardInset();
   return (
-    <div className="tl-scrim" onClick={onClose}>
+    <div className="tl-scrim" style={keyboard ? { paddingBottom: keyboard } : undefined} onClick={onClose}>
       <div className="tl-sheet" role="dialog" aria-modal="true" aria-label={label} onClick={(e) => e.stopPropagation()}>
         <div className="tl-grabber" />
         {children}
