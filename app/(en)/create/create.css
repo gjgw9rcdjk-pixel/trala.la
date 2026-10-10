@@ -281,6 +281,10 @@
 .tc-app .ta-row { display: flex; align-items: center; gap: 10px; padding: 12px 12px 12px 16px; border-radius: 14px; background: var(--raised); border: 1px solid var(--raised-border); }
 .tc-app .ta-row[data-status]:not([data-status="Active"]) { opacity: .55; }
 .tc-app .ta-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tc-app .ta-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tc-app .ta-stat { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--raised); border: 1px solid var(--raised-border); }
+.tc-app .ta-stat small { font: 700 11px var(--body); letter-spacing: .04em; color: var(--t2); }
+.tc-app .ta-stat b { font: 800 17px var(--display); color: var(--card); }
 .tc-app .ta-row__main b { font: 800 15px var(--body); letter-spacing: .08em; color: var(--card); }
 .tc-app .ta-row__main span { font: 600 13px var(--body); color: var(--t2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tc-app .ta-row__main small { font: 600 11px var(--body); color: var(--t4); }
@@ -288,3 +292,4 @@
 .tc-app .ta-row__acts .tl-btn { height: 40px; width: auto; padding: 0 12px; font-size: 11px; border-radius: 12px; }
 .tc-app .tc-out { margin: 14px 24px 0; }
 .tc-app .ta-row__main b.ta-row__problem { letter-spacing: 0; color: var(--pink); }
+.tc-app .ta-row__main b.ta-row__deck { letter-spacing: 0; }

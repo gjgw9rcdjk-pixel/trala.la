@@ -11,6 +11,7 @@
 //   tralala:deck:<deckId>             { adult } for a week: deck ids handed out
 //   tralala:adultok:<CODE>            clarify offered the 18+ switch (1 day)
 //   tralala:create:problems           last 200 failures (see logProblem)
+//   tralala:create:decks              last 200 written decks: timing and cost (see logDeck)
 //   tralala:codefail:<ip>             wrong codes typed in the last 15 min
 //
 // Without KV env vars (local dev) everything lives in memory and resets
@@ -233,5 +234,37 @@ export async function logProblem({ route, kind, code, detail }) {
 
 export async function listProblems(n = 50) {
   const rows = await store.list(PROBLEMS_KEY, n);
+  return rows.map((r) => (typeof r === 'string' ? JSON.parse(r) : r));
+}
+
+// ── deck stats, for the admin page ──────────────────────────────────────
+// One row per deck the AI wrote (or started writing): how long until the
+// first card showed up, how long the whole deck took, what it cost. Only the
+// deck's short name is kept, no idea text or cards.
+const DECKS_KEY = 'tralala:create:decks';
+const DECKS_MAX = 200;
+
+export async function logDeck({ code, name, lang, count, cards, firstCardMs, totalMs, cost, fixed, ok }) {
+  try {
+    await store.push(DECKS_KEY, {
+      at: Date.now(),
+      code: normalizeCode(code) || null,
+      name: String(name ?? '').slice(0, 40),
+      lang: String(lang ?? '').slice(0, 40),
+      count,
+      cards,
+      firstCardMs: firstCardMs ?? null,
+      totalMs: totalMs ?? null,
+      cost: cost ?? null,
+      fixed: fixed || 0,
+      ok: Boolean(ok),
+    }, DECKS_MAX);
+  } catch (err) {
+    console.error('[create] could not log deck', err);
+  }
+}
+
+export async function listDecks(n = DECKS_MAX) {
+  const rows = await store.list(DECKS_KEY, n);
   return rows.map((r) => (typeof r === 'string' ? JSON.parse(r) : r));
 }

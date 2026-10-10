@@ -32,6 +32,55 @@ const PROBLEM = {
   api: 'AI service error',
   server: 'Server error',
 };
+const secs = (ms) => (ms == null ? '—' : `${Math.round(ms / 1000)} s`);
+const usd = (n) => (n == null ? '—' : `$${n.toFixed(n < 1 ? 3 : 2)}`);
+const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const MONTH = 30 * 24 * 60 * 60 * 1000;
+
+// Deck stats (logDeck in app/api/create/codes.js): last 30 days, finished decks.
+function DeckStats({ decks, codes }) {
+  const recent = decks.filter((d) => d.at > Date.now() - MONTH);
+  const done = recent.filter((d) => d.ok);
+  const nums = (k) => done.map((d) => d[k]).filter((v) => typeof v === 'number');
+  const total = nums('cost').reduce((a, b) => a + b, 0);
+  const tiles = [
+    ['Decks', `${done.length}${recent.length > done.length ? ` (+${recent.length - done.length} failed)` : ''}`],
+    ['First card after', secs(avg(nums('firstCardMs')))],
+    ['Whole deck', secs(avg(nums('totalMs')))],
+    ['Cost per deck', `${usd(avg(nums('cost')))} · ${usd(total)} total`],
+  ];
+  return (
+    <>
+      <span className="tc-label">Decks · last 30 days (averages)</span>
+      <div className="ta-stats">
+        {tiles.map(([k, v]) => <div key={k} className="ta-stat"><small>{k}</small><b>{v}</b></div>)}
+      </div>
+      <span className="tc-label">Recent decks</span>
+      {decks.length === 0 ? (
+        <p className="tl-note">No decks written since stats started.</p>
+      ) : (
+        <ul className="ta-list">
+          {decks.slice(0, 30).map((d, i) => {
+            const note = codes?.find((c) => c.code === d.code)?.note;
+            return (
+              <li key={`${d.at}-${i}`} className="ta-row">
+                <div className="ta-row__main">
+                  <b className={d.ok ? 'ta-row__deck' : 'ta-row__problem'}>{d.name || '(no name)'}{d.ok ? '' : ' · stopped'}</b>
+                  <span>{d.code ? `${d.code}${note ? ` · ${note}` : ''}` : 'Owner'}</span>
+                  <small>
+                    {when(d.at)} · {d.cards}/{d.count} cards · {d.lang} · first card {secs(d.firstCardMs)} · all {secs(d.totalMs)} · {usd(d.cost)}
+                    {d.fixed ? ` · ${d.fixed} fixed` : ''}
+                  </small>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </>
+  );
+}
+
 const linkFor = (code) => `${window.location.origin}/create?code=${code}`;
 
 function status(c) {
@@ -58,6 +107,7 @@ export default function AdminCodes() {
   const [limit, setLimit] = useState(5);
   const [codes, setCodes] = useState(null);
   const [problems, setProblems] = useState([]);
+  const [decks, setDecks] = useState([]);
   const [created, setCreated] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -69,6 +119,7 @@ export default function AdminCodes() {
       const r = await codesApi(body);
       setCodes(r.codes);
       setProblems(r.problems || []);
+      setDecks(r.decks || []);
       return r;
     } catch (e) {
       setError(e.message);
@@ -171,6 +222,8 @@ export default function AdminCodes() {
                 })}
               </ul>
             )}
+
+            <DeckStats decks={decks} codes={codes} />
 
             <span className="tc-label">Recent problems</span>
             {problems.length === 0 ? (

@@ -531,6 +531,9 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
     return () => window.removeEventListener('beforeunload', warn);
   }, [aiWriting]);
 
+  // Writing a deck starts with a long silent stretch (the model drafts and
+  // picks before it writes), so the loading screen stays up until the first card.
+  const waitingFirstCard = step === 2 && Boolean(writing) && !deck?.cards.length;
   const canGoTo = (i) => i < step && !busy && !writing && i !== 3 && !editing;
 
   // Waiting for the saved code to be checked: show nothing rather than flash
@@ -608,7 +611,7 @@ export default function CreateFlow({ admin, initialUi = 'en' }) {
               {meta.model} · {(meta.ms / 1000).toFixed(0)} s · ~${meta.cost.toFixed(3)}{meta.fixed ? ` · ${meta.fixed} fixed` : ''}
             </p>
           )}
-          {busy ? (
+          {busy || waitingFirstCard ? (
             <Thinking
               lines={step === 1 ? s.thinkingLines : s.writingLines}
               wait={ai && step === 2 ? s.writingWait : null}

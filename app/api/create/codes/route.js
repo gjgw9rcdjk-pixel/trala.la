@@ -3,7 +3,7 @@
 
 import { adminOnly } from '@/lib/adminAuth';
 import { errorResponse } from '../ai';
-import { createCode, disableCode, listCodes, listProblems } from '../codes';
+import { createCode, disableCode, listCodes, listDecks, listProblems } from '../codes';
 
 export async function POST(request) {
   const denied = await adminOnly();
@@ -12,7 +12,7 @@ export async function POST(request) {
   try {
     const created = body.action === 'create' ? await createCode({ note: body.note, limit: body.limit }) : null;
     if (body.action === 'disable') await disableCode(body.code);
-    return Response.json({ created, codes: await listCodes(), problems: await listProblems() });
+    return Response.json({ created, codes: await listCodes(), problems: await listProblems(), decks: await listDecks() });
   } catch (err) {
     return errorResponse(err);
   }

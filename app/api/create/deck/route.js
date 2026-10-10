@@ -13,7 +13,7 @@
 
 import { streamJson, gate, clip, errorInfo } from '../ai';
 import { cardRules, checkCards, fixCards } from '../rules';
-import { logProblem, takeGeneration } from '../codes';
+import { logDeck, logProblem, takeGeneration } from '../codes';
 
 export const maxDuration = 300;
 const KEEPALIVE_MS = 5000;
@@ -78,24 +78,32 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
         try { controller.enqueue(enc.encode('\n')); } catch { /* stream closed */ }
       }, KEEPALIVE_MS);
       let nameSent = false;
+      let deckName = '';
       let sent = 0;
+      const started = Date.now();
+      let firstCardMs = null;
+      let ok = false;
+      let meta = null;
       if (access.deckId) send({ type: 'deck', id: access.deckId, left: access.left });
       try {
         const system = cardRules(deckLang, { adult });
-        const { text, meta } = await streamJson({
+        const out = await streamJson({
           name: 'deck', model: body.model, effort: 'high', maxTokens: 64000,
           system, prompt, schema, signal: request.signal,
           onText: (soFar) => {
             if (!nameSent) {
               const n = soFar.match(NAME_RE);
-              if (n) { send({ type: 'name', name: clip(unquote(n[1]), 40) }); nameSent = true; }
+              if (n) { deckName = clip(unquote(n[1]), 40); send({ type: 'name', name: deckName }); nameSent = true; }
             }
             const cards = [...soFar.matchAll(CARD_RE)];
+            if (firstCardMs == null && cards.length) firstCardMs = Date.now() - started;
             for (; sent < cards.length && sent < count; sent += 1) {
               send({ type: 'card', text: clip(unquote(cards[sent][1]), 200), level: Number(cards[sent][2]) });
             }
           },
         });
+        const { text } = out;
+        meta = out.meta;
         // Code checks on the finished deck; flagged cards get one small fix call.
         const texts = (JSON.parse(text).cards || []).slice(0, count).map((c) => clip(c.text, 200));
         const flagged = checkCards(texts, deckLang);
@@ -113,6 +121,7 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
           }
         }
         send({ type: 'done', meta });
+        ok = true;
       } catch (err) {
         // A server-side failure before half the cards were written: the deck
         // doesn't count (the cards so far stay with the player). A deck the
@@ -128,6 +137,18 @@ Also give the deck a short, warm name in ${deckLang} (2-4 words, no quotes, no e
         });
       } finally {
         clearInterval(ping);
+        await logDeck({
+          code: access.admin ? null : body.code,
+          name: deckName,
+          lang: deckLang,
+          count,
+          cards: sent,
+          firstCardMs,
+          totalMs: Date.now() - started,
+          cost: meta?.cost,
+          fixed: meta?.fixed,
+          ok,
+        });
         try { controller.close(); } catch { /* client already gone */ }
       }
     },
